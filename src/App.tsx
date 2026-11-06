@@ -45,6 +45,7 @@ import { metroOf } from './game/metroData';
 import { USINA_ROOM } from './game/usinaInterior';
 import { LIFE_REPORT } from './game/cityLife';
 import { webglInfo, buildReport } from './services/diagnostics';
+import { isTouchDevice } from './components/HUD';
 import { VEHICLES, type VehicleDef } from './game/vehicles';
 import { PrefeituraModal } from './components/PrefeituraModal';
 import { IndustryModal, type IndustryKind } from './components/IndustryModal';
@@ -752,7 +753,7 @@ export default function App() {
             }}
           />
 
-          <div className="absolute bottom-3 right-3 z-20 md:hidden">
+          <div className={`absolute bottom-3 right-3 z-20 ${isTouchDevice() ? '' : 'md:hidden'}`}>
             <Joystick onChange={(x, y) => engineRef.current?.setMoveInput(x, y)} />
           </div>
 

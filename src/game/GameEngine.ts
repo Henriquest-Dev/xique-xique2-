@@ -180,6 +180,8 @@ export class GameEngine {
   private pinch = new Map<number, { x: number; y: number }>();
   private listeners: Array<() => void> = [];
   private resizeObserver: ResizeObserver | null = null;
+  private lite = false;
+  private pixelBudget = 1.6e6;
 
   constructor(container: HTMLElement, callbacks: EngineCallbacks = {}) {
     this.container = container;
@@ -207,7 +209,12 @@ export class GameEngine {
         // alguns telemóveis recusam o pedido "high-performance": tenta o mínimo possível
         this.renderer = new THREE.WebGLRenderer({ antialias: false });
       }
-      this.renderer.setPixelRatio(lite ? 1 : Math.min(window.devicePixelRatio || 1, 2));
+      this.lite = lite;
+      this.pixelBudget = lite ? 0.8e6 : 1.6e6;
+      this.renderer.domElement.addEventListener('webglcontextlost', (e) => {
+        e.preventDefault();
+        this.cb.onError?.('A placa gráfica do aparelho ficou sem memória (contexto WebGL perdido). Feche outras abas e use o modo leve.');
+      });
       this.renderer.shadowMap.enabled = !lite;
       this.renderer.shadowMap.type = THREE.PCFShadowMap;
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -449,7 +456,7 @@ export class GameEngine {
     if (this.renderer) {
       this.renderer.shadowMap.enabled = high;
       this.sun.castShadow = high;
-      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, high ? 2 : 1));
+      this.pixelBudget = this.lite ? 0.8e6 : high ? 1.6e6 : 1.0e6;
     }
     const showTags = settings.showTags !== false;
     const apply = (o: THREE.Object3D) => {
@@ -1374,6 +1381,9 @@ export class GameEngine {
     if (!this.renderer) return;
     const w = Math.max(1, this.container.clientWidth);
     const h = Math.max(1, this.container.clientHeight);
+    // orçamento de pixeis: ecrãs altos de telemóvel (ex.: 980x1824 em modo computador) esgotavam a memória gráfica
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.renderer.setPixelRatio(Math.max(0.6, Math.min(dpr, Math.sqrt(this.pixelBudget / (w * h)))));
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();

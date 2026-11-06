@@ -23,8 +23,12 @@ interface Props {
   onClean?: () => void;
 }
 
+export function isTouchDevice() {
+  try { return navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches; } catch { return false; }
+}
+
 function useCompact() {
-  const get = () => (typeof window !== 'undefined' ? window.innerWidth < 640 || window.innerHeight < 480 : false);
+  const get = () => (typeof window !== 'undefined' ? window.innerWidth < 640 || window.innerHeight < 480 || isTouchDevice() : false);
   const [compact, setCompact] = useState(get);
   useEffect(() => {
     const on = () => setCompact(get());
