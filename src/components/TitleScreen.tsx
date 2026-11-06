@@ -92,10 +92,10 @@ export function TitleScreen({ hasSave, savedName, savedHandle = '', onStart }: P
   const wide = step === 'character';
 
   return (
-    <div className="relative flex min-h-[100dvh] w-full flex-col overflow-hidden bg-[#0a0720] text-white">
+    <div className="fixed inset-0 flex w-full flex-col overflow-y-auto overflow-x-hidden overscroll-contain bg-[#0a0720] text-white">
       <style>{CSS}</style>
       {/* cena cinematográfica: Ken Burns + fusão entre planos */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden bg-[linear-gradient(180deg,#1b1147_0%,#7c2d12_70%,#f59e0b_100%)]">
+      <div className="pointer-events-none fixed inset-0 overflow-hidden bg-[linear-gradient(180deg,#1b1147_0%,#7c2d12_70%,#f59e0b_100%)]">
         {SCENES.map((sc, i) => (
           <img
             key={sc.src}
@@ -113,8 +113,8 @@ export function TitleScreen({ hasSave, savedName, savedHandle = '', onStart }: P
           <span key={i} className="absolute bottom-0 rounded-full bg-amber-200" style={{ left: `${d.left}%`, width: d.size, height: d.size, animation: `xx-dust ${d.dur}s ${d.delay}s linear infinite` }} />
         ))}
         {/* barras de cinema */}
-        <div className="absolute inset-x-0 top-0 h-[6vh] origin-top bg-black" style={{ animation: 'xx-bar-in 1.2s ease-out both' }} />
-        <div className="absolute inset-x-0 bottom-0 h-[6vh] origin-bottom bg-black" style={{ animation: 'xx-bar-in 1.2s ease-out both' }} />
+        <div className="absolute inset-x-0 top-0 hidden h-[6vh] origin-top sm:block bg-black" style={{ animation: 'xx-bar-in 1.2s ease-out both' }} />
+        <div className="absolute inset-x-0 bottom-0 hidden h-[6vh] origin-bottom sm:block bg-black" style={{ animation: 'xx-bar-in 1.2s ease-out both' }} />
         <p key={scene} className="absolute bottom-[8vh] right-5 hidden items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.3em] text-amber-100/90 sm:flex" style={{ animation: 'xx-fade 7s both' }}>
           <span className="h-px w-8 bg-amber-200/70" />{SCENES[scene].label}
         </p>

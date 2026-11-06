@@ -679,13 +679,13 @@ export default function App() {
   const aspect = st.settings.aspect ?? 'auto';
   const stageStyle: React.CSSProperties =
     aspect === 'portrait'
-      ? { width: 'min(100vw, calc(100vh * 9 / 16))', height: 'min(100vh, calc(100vw * 16 / 9))' }
+      ? { width: 'min(100vw, calc(100dvh * 9 / 16))', height: 'min(100dvh, calc(100vw * 16 / 9))' }
       : aspect === 'landscape'
-      ? { width: 'min(100vw, calc(100vh * 16 / 9))', height: 'min(100vh, calc(100vw * 9 / 16))' }
-      : { width: '100vw', height: '100vh' };
+      ? { width: 'min(100vw, calc(100dvh * 16 / 9))', height: 'min(100dvh, calc(100vw * 9 / 16))' }
+      : { width: '100%', height: '100%' };
 
   return (
-    <div className="relative flex h-screen w-screen items-center justify-center overflow-hidden bg-black">
+    <div className="fixed inset-0 flex items-center justify-center overflow-hidden bg-black">
       <div className="relative overflow-hidden bg-[#07131f]" style={stageStyle}>
       <div ref={containerRef} className="absolute inset-0" />
 

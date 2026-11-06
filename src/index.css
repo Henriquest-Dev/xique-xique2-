@@ -20,6 +20,10 @@ body {
   background: #07131f;
   color: #e8f1f8;
   overscroll-behavior: none;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  touch-action: manipulation;
   -webkit-font-smoothing: antialiased;
 }
 

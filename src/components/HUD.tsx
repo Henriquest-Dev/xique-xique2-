@@ -56,7 +56,7 @@ export function HUD({ state, nearby, position, heading, cameraMode, onOpen, onAc
 
   if (clean) {
     return (
-      <div className="pointer-events-none absolute inset-0 z-20 select-none">
+      <div className="pointer-events-none absolute z-20 select-none" style={{ top: 'env(safe-area-inset-top)', right: 'env(safe-area-inset-right)', bottom: 'env(safe-area-inset-bottom)', left: 'env(safe-area-inset-left)' }}>
         <button onClick={onClean} className="pointer-events-auto absolute right-2 top-2 rounded-full bg-black/40 px-3 py-1 text-[10px] font-bold text-white/70 opacity-30 hover:opacity-100">Mostrar interface</button>
         {recording && (
           <button onClick={onRecord} className="pointer-events-auto absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/50 px-3 py-1.5 text-[11px] font-extrabold text-red-400">
@@ -86,7 +86,7 @@ export function HUD({ state, nearby, position, heading, cameraMode, onOpen, onAc
   return (
     <div className="pointer-events-none absolute inset-0 z-20 select-none">
       {/* Perfil + moeda + hora */}
-      <div className="absolute left-3 top-3 flex max-w-[calc(100vw-5.5rem)] flex-col gap-2 sm:left-4 sm:top-4">
+      <div className="absolute left-3 top-3 flex max-w-[calc(100vw-8.75rem)] sm:max-w-[calc(100vw-5.5rem)] flex-col gap-2 sm:left-4 sm:top-4">
         <div className="chip pointer-events-auto flex items-center gap-2.5 rounded-2xl py-1.5 pl-1.5 pr-4">
           <span className="flex h-11 w-11 items-center justify-center rounded-xl border-2 border-[#ffe9a0] bg-gradient-to-b from-[#ffd44d] to-[#ff9f1a] text-[#3a2200]"><Ico name="user" size={26} /></span>
           <div className="min-w-0">
@@ -142,7 +142,7 @@ export function HUD({ state, nearby, position, heading, cameraMode, onOpen, onAc
       )}
 
       {/* Botão de ação */}
-      {nearby && (
+      {nearby && !compact && (
         <div className="absolute bottom-[8.5rem] left-1/2 -translate-x-1/2 sm:bottom-24">
           <button onClick={onActivate} className="btn-go pointer-events-auto animate-float-up flex items-center gap-3 rounded-2xl py-2 pl-2 pr-5 transition active:translate-y-0.5">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#052e16]/85 text-sm font-extrabold text-[#5eea8d]">{compact ? <Ico name="arrow" size={20} /> : 'E'}</span>
@@ -164,7 +164,7 @@ export function HUD({ state, nearby, position, heading, cameraMode, onOpen, onAc
       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 sm:bottom-4">
         <div className="pointer-events-auto flex items-end gap-1.5 rounded-[22px] border-[3px] border-[#3c4686] bg-[#171c3d]/95 p-1.5 shadow-[0_4px_0_#0c1030]">
           {hotbar.map((h, i) => (
-            <button key={h.id} onClick={() => onOpen('backpack')} className="relative flex h-12 w-12 flex-col items-center justify-center rounded-xl border-2 border-[#3c4686] bg-[#232a55] text-white transition hover:border-[#ffd44d] sm:h-14 sm:w-14" title={RESOURCES[h.id].name}>
+            <button key={h.id} onClick={() => onOpen('backpack')} className="relative hidden sm:flex h-12 w-12 flex-col items-center justify-center rounded-xl border-2 border-[#3c4686] bg-[#232a55] text-white transition hover:border-[#ffd44d] sm:h-14 sm:w-14" title={RESOURCES[h.id].name}>
               <span className="absolute left-1 top-0.5 text-[9px] font-extrabold text-slate-400">{i + 1}</span>
               <span className="text-[#ffd44d]"><Ico name={h.id === 'tabua' ? 'plank' : h.id === 'tijolo' ? 'brick' : h.id === 'madeira' ? 'wood' : 'stone'} size={24} /></span>
               <span className="text-[11px] font-extrabold leading-none">{h.n}</span>
@@ -187,7 +187,7 @@ export function HUD({ state, nearby, position, heading, cameraMode, onOpen, onAc
         <button onClick={onClean} aria-label="Esconder interface" title="Esconder interface" className="chip pointer-events-auto flex h-11 w-11 items-center justify-center rounded-2xl text-slate-200"><Ico name="eye" size={22} /></button>
       </div>
       {compact && (
-        <div className="pointer-events-auto absolute bottom-[5.5rem] right-3 flex flex-col gap-1.5">
+        <div className="pointer-events-auto absolute bottom-[9rem] right-3 flex flex-col gap-1.5">
           <button onClick={() => onCameraMode(CAMERA_ORDER[(CAMERA_ORDER.indexOf(cameraMode) + 1) % CAMERA_ORDER.length])} className="chip flex h-11 items-center gap-1 rounded-2xl px-3 text-xs font-extrabold text-white"><Ico name="camera" size={16} />{CAM_SHORT[cameraMode]}</button>
         </div>
       )}
