@@ -137,6 +137,7 @@ export class GameEngine {
   private disposed = false;
   private paused = false;
   private ready = false;
+  public isReady() { return this.ready; }
 
   private world: BuiltWorld | null = null;
   private traffic: TrafficSystem | null = null;
@@ -199,9 +200,15 @@ export class GameEngine {
   public async init(): Promise<void> {
     try {
       this.cb.onProgress?.(3, 'A criar o renderer…');
-      this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-      this.renderer.shadowMap.enabled = true;
+      const lite = (() => { try { return localStorage.getItem('xx_lite') === '1'; } catch { return false; } })();
+      try {
+        this.renderer = new THREE.WebGLRenderer({ antialias: !lite, powerPreference: lite ? 'default' : 'high-performance' });
+      } catch {
+        // alguns telemóveis recusam o pedido "high-performance": tenta o mínimo possível
+        this.renderer = new THREE.WebGLRenderer({ antialias: false });
+      }
+      this.renderer.setPixelRatio(lite ? 1 : Math.min(window.devicePixelRatio || 1, 2));
+      this.renderer.shadowMap.enabled = !lite;
       this.renderer.shadowMap.type = THREE.PCFShadowMap;
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -216,8 +223,8 @@ export class GameEngine {
       this.hemi = new THREE.HemisphereLight('#cfe9ff', '#7a6a4f', 0.9);
       this.scene.add(this.hemi);
       this.sun = new THREE.DirectionalLight('#fff3d6', 2.2);
-      this.sun.castShadow = true;
-      this.sun.shadow.mapSize.set(2048, 2048);
+      this.sun.castShadow = !lite;
+      this.sun.shadow.mapSize.set(lite ? 512 : 2048, lite ? 512 : 2048);
       const sc = this.sun.shadow.camera;
       sc.left = -70;
       sc.right = 70;

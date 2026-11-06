@@ -44,6 +44,7 @@ import { setLedgerCity } from './data';
 import { metroOf } from './game/metroData';
 import { USINA_ROOM } from './game/usinaInterior';
 import { LIFE_REPORT } from './game/cityLife';
+import { webglInfo, buildReport } from './services/diagnostics';
 import { VEHICLES, type VehicleDef } from './game/vehicles';
 import { PrefeituraModal } from './components/PrefeituraModal';
 import { IndustryModal, type IndustryKind } from './components/IndustryModal';
@@ -81,6 +82,9 @@ export default function App() {
   const [started, setStarted] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState('A preparar a cidade…');
+  const [engineError, setEngineError] = useState<string | null>(null);
+  const progressLabelRef = useRef('');
+  progressLabelRef.current = progressLabel;
   const [nearby, setNearby] = useState<WorldTarget | null>(null);
   const [position, setPosition] = useState({ x: 0, z: 12 });
   const [heading, setHeading] = useState(0);
@@ -354,15 +358,19 @@ export default function App() {
       },
       onCameraModeChange: (mode) => setCameraMode(mode),
       onError: (message) => {
-        gameState.toast(`Erro 3D: ${message}`, 'error');
-        setPhase('title');
+        setEngineError(message);
       },
     });
+    // se ficar preso a carregar, mostra onde parou em vez de ficar parado para sempre
+    const watchdog = window.setTimeout(() => {
+      if (!engine.isReady()) setEngineError(`O carregamento ficou preso em: "${progressLabelRef.current}"`);
+    }, 60000);
 
     engineRef.current = engine;
     void engine.init();
 
     return () => {
+      window.clearTimeout(watchdog);
       engine.dispose();
       if (engineRef.current === engine) engineRef.current = null;
     };
@@ -680,6 +688,19 @@ export default function App() {
     <div className="relative flex h-screen w-screen items-center justify-center overflow-hidden bg-black">
       <div className="relative overflow-hidden bg-[#07131f]" style={stageStyle}>
       <div ref={containerRef} className="absolute inset-0" />
+
+      {engineError && (
+        <div className="absolute inset-0 z-[70] flex flex-col items-center justify-center bg-[#04101a] px-6 text-center">
+          <h1 className="font-display text-xl font-extrabold text-white">O motor 3D não arrancou</h1>
+          <p className="mt-3 max-w-md break-words rounded-xl bg-red-500/15 px-3 py-2 text-sm text-red-200">{engineError}</p>
+          <p className="mt-3 max-w-md text-xs text-slate-400">Placa gráfica: {webglInfo()}</p>
+          <div className="mt-5 flex w-full max-w-xs flex-col gap-2">
+            <button className="rounded-xl bg-amber-400 px-4 py-3 text-sm font-extrabold text-slate-900" onClick={() => { try { localStorage.setItem('xx_lite', '1'); } catch { /* */ } location.reload(); }}>Tentar modo leve</button>
+            <button className="rounded-xl bg-white/10 px-4 py-3 text-sm font-bold text-white" onClick={() => location.reload()}>Tentar de novo</button>
+            <button className="rounded-xl bg-white/10 px-4 py-3 text-sm font-bold text-white" onClick={() => { void navigator.clipboard?.writeText(buildReport()); }}>Copiar relatório do erro</button>
+          </div>
+        </div>
+      )}
 
       {phase === 'loading' && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[#04101a]/92 px-6 text-center">

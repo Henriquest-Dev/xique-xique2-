@@ -69,3 +69,13 @@ export function buildReport(): string {
   }, null, 2);
 }
 export function clearDiagnostics() { buf = []; try { localStorage.removeItem(KEY); } catch { /* */ } }
+
+export function webglInfo(): string {
+  try {
+    const cv = document.createElement('canvas');
+    const g = (cv.getContext('webgl2') || cv.getContext('webgl')) as WebGLRenderingContext | null;
+    if (!g) return 'WebGL NÃO disponível neste navegador';
+    const ext = g.getExtension('WEBGL_debug_renderer_info');
+    return ext ? String(g.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : 'WebGL disponível';
+  } catch { return 'erro ao testar WebGL'; }
+}
