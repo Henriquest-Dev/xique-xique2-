@@ -346,6 +346,7 @@ export function MiniCharacterPreview3D({
     return () => {
       if (rendererRef.current) {
         rendererRef.current.dispose();
+        rendererRef.current.forceContextLoss();
         rendererRef.current.domElement.remove();
         rendererRef.current = null;
       }

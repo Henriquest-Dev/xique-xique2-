@@ -670,6 +670,7 @@ export class GameEngine {
     sound.setAmbient(false);
     if (this.renderer) {
       this.renderer.dispose();
+      this.renderer.forceContextLoss();
       this.renderer.domElement.remove();
     }
   }

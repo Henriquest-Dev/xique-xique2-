@@ -128,6 +128,7 @@ export function InteriorPreview({ items, height = 300 }: Props) {
       observer.disconnect();
       // As geometrias/materiais vêm do cache partilhado de assets: não dispor.
       renderer.dispose();
+      renderer.forceContextLoss();
     };
   }, [items, height]);
 

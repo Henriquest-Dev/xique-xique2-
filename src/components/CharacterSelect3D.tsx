@@ -368,6 +368,7 @@ export function ModelPreview({
       hero?.mixer?.stopAllAction();
       pet?.mixer?.stopAllAction();
       renderer.dispose();
+      renderer.forceContextLoss(); // liberta mesmo o contexto WebGL (o Chrome só permite ~16)
       canvas.remove();
     };
   }, [modelKey, petKey, sway]);
