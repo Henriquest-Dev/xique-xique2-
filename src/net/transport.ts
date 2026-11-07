@@ -1,37 +1,48 @@
-// Camada de transporte do multiplayer. Duas implementações com a mesma interface:
-//  - SupabaseTransport: jogadores de dispositivos diferentes (Realtime Broadcast + Presence)
-//  - LocalTransport: separadores do mesmo navegador (BroadcastChannel) — usado em testes e sem servidor
+// Transporte do multiplayer: um único mundo partilhado, dividido em canais por zona (células de 160 m).
+// Cada jogador só ouve a sua zona e as vizinhas — assim milhares de pessoas partilham a mesma cidade
+// sem que cada uma receba o tráfego de todas. Duas implementações com a mesma interface:
+//  - SupabaseTransport: dispositivos diferentes (Realtime Broadcast + Presence)
+//  - LocalTransport: separadores do mesmo navegador (BroadcastChannel) — testes e modo sem servidor
+export interface OpenOpts { track?: boolean; onPresence?: (count: number) => void }
 export interface Transport {
   readonly mode: 'local' | 'supabase';
-  join(room: string, selfId: string, onMsg: (m: unknown) => void, onPresence: (ids: string[]) => void): Promise<void>;
-  send(m: unknown): void;
-  leave(): void;
+  open(ch: string, selfId: string, onMsg: (m: unknown) => void, opts?: OpenOpts): Promise<void>;
+  close(ch: string): void;
+  send(ch: string, m: unknown): void;
+  has(ch: string): boolean;
+  closeAll(): void;
 }
 
 export class LocalTransport implements Transport {
   readonly mode = 'local' as const;
-  private bc: BroadcastChannel | null = null;
-  private self = '';
-  private seen = new Map<string, number>();
-  private timer: ReturnType<typeof setInterval> | null = null;
-  async join(room: string, selfId: string, onMsg: (m: unknown) => void, onPresence: (ids: string[]) => void) {
-    this.self = selfId;
-    this.bc = new BroadcastChannel('xx2:' + room);
-    this.bc.onmessage = (e) => {
-      const m = e.data as { id?: string };
-      if (m && typeof m.id === 'string' && m.id !== selfId) { this.seen.set(m.id, Date.now()); onMsg(m); }
+  private chans = new Map<string, { bc: BroadcastChannel; timer: ReturnType<typeof setInterval> | null }>();
+  async open(ch: string, selfId: string, onMsg: (m: unknown) => void, opts: OpenOpts = {}) {
+    if (this.chans.has(ch)) return;
+    const bc = new BroadcastChannel('xx2:' + ch);
+    const seen = new Map<string, number>();
+    bc.onmessage = (e) => {
+      const m = e.data as { id?: string; hb?: boolean };
+      if (!m || typeof m.id !== 'string' || m.id === selfId) return;
+      seen.set(m.id, Date.now());
+      if (!m.hb) onMsg(m);
     };
-    this.timer = setInterval(() => {
-      const now = Date.now();
-      for (const [k, t] of this.seen) if (now - t > 6000) this.seen.delete(k);
-      onPresence([selfId, ...this.seen.keys()]);
-    }, 1000);
+    let timer: ReturnType<typeof setInterval> | null = null;
+    if (opts.onPresence || opts.track) {
+      timer = setInterval(() => {
+        const now = Date.now();
+        if (opts.track) bc.postMessage({ id: selfId, hb: true });
+        for (const [k, t] of seen) if (now - t > 5000) seen.delete(k);
+        opts.onPresence?.(seen.size + (opts.track ? 1 : 0));
+      }, 1000);
+    }
+    this.chans.set(ch, { bc, timer });
   }
-  send(m: unknown) { this.bc?.postMessage(m); }
-  leave() { this.bc?.close(); this.bc = null; if (this.timer) clearInterval(this.timer); this.timer = null; this.seen.clear(); }
+  has(ch: string) { return this.chans.has(ch); }
+  send(ch: string, m: unknown) { this.chans.get(ch)?.bc.postMessage(m); }
+  close(ch: string) { const c = this.chans.get(ch); if (!c) return; c.bc.close(); if (c.timer) clearInterval(c.timer); this.chans.delete(ch); }
+  closeAll() { for (const k of [...this.chans.keys()]) this.close(k); }
 }
 
-// tipos mínimos do canal Realtime, para não depender do pacote em tempo de compilação
 interface RtChannel {
   on(type: string, filter: Record<string, unknown>, cb: (p: { payload?: unknown }) => void): RtChannel;
   subscribe(cb?: (status: string) => void): RtChannel;
@@ -44,25 +55,28 @@ interface RtClient { channel(name: string, opts: unknown): RtChannel; removeChan
 export class SupabaseTransport implements Transport {
   readonly mode = 'supabase' as const;
   private client: RtClient | null = null;
-  private ch: RtChannel | null = null;
+  private chans = new Map<string, RtChannel>();
   constructor(private url: string, private key: string) {}
-  async join(room: string, selfId: string, onMsg: (m: unknown) => void, onPresence: (ids: string[]) => void) {
+  has(ch: string) { return this.chans.has(ch); }
+  async open(ch: string, selfId: string, onMsg: (m: unknown) => void, opts: OpenOpts = {}) {
+    if (this.chans.has(ch)) return;
     if (!this.client) {
       const { createClient } = await import('@supabase/supabase-js');
-      this.client = createClient(this.url, this.key, { realtime: { params: { eventsPerSecond: 12 } }, auth: { persistSession: false } }) as unknown as RtClient;
+      this.client = createClient(this.url, this.key, { realtime: { params: { eventsPerSecond: 15 } }, auth: { persistSession: false } }) as unknown as RtClient;
     }
-    const ch = this.client.channel(room, { config: { broadcast: { self: false, ack: false }, presence: { key: selfId } } });
-    ch.on('broadcast', { event: 's' }, (p) => onMsg(p.payload));
-    ch.on('presence', { event: 'sync' }, () => onPresence(Object.keys(ch.presenceState())));
+    const c = this.client.channel(ch, { config: { broadcast: { self: false, ack: false }, presence: { key: opts.track ? selfId : selfId + ':' + Math.random().toString(36).slice(2, 6) } } });
+    c.on('broadcast', { event: 's' }, (p) => onMsg(p.payload));
+    if (opts.onPresence) c.on('presence', { event: 'sync' }, () => opts.onPresence!(Object.keys(c.presenceState()).filter((k) => !k.includes(':')).length));
+    this.chans.set(ch, c);
     await new Promise<void>((resolve, reject) => {
       const to = setTimeout(() => reject(new Error('Sem ligação ao servidor multiplayer.')), 10000);
-      ch.subscribe((status) => {
-        if (status === 'SUBSCRIBED') { clearTimeout(to); void ch.track({ t: Date.now() }); resolve(); }
-        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') { clearTimeout(to); reject(new Error('Falha no canal multiplayer: ' + status)); }
+      c.subscribe((status) => {
+        if (status === 'SUBSCRIBED') { clearTimeout(to); if (opts.track) void c.track({ t: Date.now() }); resolve(); }
+        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') { clearTimeout(to); this.chans.delete(ch); reject(new Error('Falha no canal multiplayer: ' + status)); }
       });
     });
-    this.ch = ch;
   }
-  send(m: unknown) { this.ch?.send({ type: 'broadcast', event: 's', payload: m }); }
-  leave() { if (this.ch && this.client) void this.client.removeChannel(this.ch); this.ch = null; }
+  send(ch: string, m: unknown) { this.chans.get(ch)?.send({ type: 'broadcast', event: 's', payload: m }); }
+  close(ch: string) { const c = this.chans.get(ch); if (c && this.client) void this.client.removeChannel(c); this.chans.delete(ch); }
+  closeAll() { for (const k of [...this.chans.keys()]) this.close(k); }
 }

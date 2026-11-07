@@ -104,6 +104,7 @@ export default function App() {
   const [clean, setClean] = useState(false);
   const [filming, setFilming] = useState(false);
   const [net, setNet] = useState({ status: multiplayer.status, online: multiplayer.online, room: multiplayer.room, mode: multiplayer.mode });
+  useEffect(() => multiplayer.onChat((c) => gameState.addChatMessage(c.n || c.h || 'Jogador', c.h || 'jogador', c.text, false)), []);
   useEffect(() => multiplayer.subscribe(() => setNet({ status: multiplayer.status, online: multiplayer.online, room: multiplayer.room, mode: multiplayer.mode })), []);
   const [recFile, setRecFile] = useState<{ url: string; name: string; seconds: number } | null>(null);
   const [industry, setIndustry] = useState<IndustryKind | null>(null);
@@ -870,7 +871,7 @@ export default function App() {
           {!filming && net.status !== 'off' && (
             <div className="pointer-events-none absolute left-1/2 top-[max(0.4rem,env(safe-area-inset-top))] z-30 -translate-x-1/2">
               <span className={`rounded-full border-2 px-2.5 py-0.5 text-[10px] font-extrabold ${net.status === 'online' ? 'border-emerald-300/60 bg-emerald-500/20 text-emerald-200' : net.status === 'error' ? 'border-red-300/60 bg-red-500/20 text-red-200' : 'border-slate-400/50 bg-slate-700/60 text-slate-200'}`}>
-                {net.status === 'online' ? (net.mode === 'local' ? `Offline · só neste aparelho` : `Online · ${net.online} na sala`) : net.status === 'error' ? 'Sem multiplayer' : 'A ligar…'}
+                {net.status === 'online' ? (net.mode === 'local' && net.online <= 1 ? 'Sem servidor · só tu' : `Online · ${net.online} jogador${net.online === 1 ? '' : 'es'}`) : net.status === 'error' ? 'Sem multiplayer' : 'A ligar…'}
               </span>
             </div>
           )}

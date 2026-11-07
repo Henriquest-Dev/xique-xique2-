@@ -131,7 +131,7 @@ export function PhoneModal({ open, onClose, onOpenApp }: Props) {
             </Button>
           </form>
           <p className="mt-1.5 text-[10px] text-slate-400">
-            Chat local com respostas simuladas. Não há servidor nem outros jogadores nesta versão.
+            Chat global: todos os jogadores online na cidade leem as tuas mensagens. Sozinho na cidade, os moradores respondem.
           </p>
         </div>
       )}

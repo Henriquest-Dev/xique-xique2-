@@ -495,7 +495,7 @@ export class GameEngine {
     const a = st.avatar;
     return {
       h: st.playerHandle, n: st.playerName,
-      av: { a: a.assetId, st: a.spriteType, sk: a.skinColor, sh: a.shirtColor, pa: a.pantsColor, ha: a.hairColor, hat: a.hatStyle, fam: a.avatarFamily, comp: a.companionId },
+      av: { a: a.assetId, st: a.spriteType, sk: a.skinColor, sh: a.shirtColor, pa: a.pantsColor, ha: a.hairColor, hat: a.hatStyle, fam: a.avatarFamily, comp: a.companionId, rep: a.representation, rig: a.rigAdapter },
       x: this.pos.x, z: this.pos.z, r: this.heading, s: this.speed, v: this.vehicle?.id ?? null,
     };
   }
@@ -506,7 +506,7 @@ export class GameEngine {
     ra.loading = true;
     try {
       const actor = await createActor({
-        avatarFamily: (st.av.fam as AvatarConfig['avatarFamily']) || 'mini', assetId: st.av.a, representation: '3d', rigAdapter: 'humanoid', name: st.n,
+        avatarFamily: (st.av.fam as AvatarConfig['avatarFamily']) || 'mini', assetId: st.av.a, representation: st.av.rep as AvatarConfig['representation'], rigAdapter: st.av.rig as AvatarConfig['rigAdapter'], name: st.n,
         skinColor: st.av.sk, shirtColor: st.av.sh, pantsColor: st.av.pa, hairColor: st.av.ha, hatStyle: (st.av.hat as AvatarConfig['hatStyle']) || 'none',
         companionId: 'none', spriteType: st.av.st as AvatarConfig['spriteType'],
       });

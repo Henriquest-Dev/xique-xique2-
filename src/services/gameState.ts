@@ -4,6 +4,7 @@
 // Os dados são guardados em localStorage com versionamento e migração.
 // =============================================================================
 
+import { multiplayer } from '../net/multiplayer';
 import {
   AvatarConfig,
   BusinessId,
@@ -1065,7 +1066,8 @@ class GameStateManager {
   public sendChat(text: string) {
     if (!text.trim()) return;
     this.addChatMessage(this.state.playerName, this.state.playerHandle, text.trim(), true);
-    // Resposta simulada: não existe servidor; o chat é local a este navegador.
+    // Com outros jogadores online a mensagem vai para o chat global; sozinho, os moradores respondem.
+    if (multiplayer.status === 'online' && multiplayer.online > 1) { if (!multiplayer.sendChat(text)) this.toast('Calma! Uma mensagem de cada vez.', 'warning'); return; }
     const replies = [
       'Boa! Passo pela praça daqui a pouco.',
       'A fornada está quase pronta, vem buscar!',

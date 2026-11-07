@@ -64,6 +64,19 @@ const CSS = `
 @media (prefers-reduced-motion:reduce){.xx-kb{animation:none!important}}
 `;
 
+import { multiplayer } from '../net/multiplayer';
+
+function OnlineCount() {
+  const [n, setN] = useState(multiplayer.online);
+  useEffect(() => { void multiplayer.watchCount(); const off = multiplayer.subscribe(() => setN(multiplayer.online)); return () => { off(); multiplayer.unwatchCount(); }; }, []);
+  return (
+    <p className="flex items-center justify-center gap-2 text-sm font-extrabold text-emerald-200">
+      <span className={`h-2.5 w-2.5 rounded-full ${n > 0 ? 'animate-pulse bg-emerald-400' : 'bg-slate-500'}`} />
+      {n > 0 ? `${n} jogador${n === 1 ? '' : 'es'} online agora` : 'Sê o primeiro a entrar na cidade'}
+    </p>
+  );
+}
+
 export function TitleScreen({ hasSave, savedName, savedHandle = '', onStart }: Props) {
   const [step, setStep] = useState<Step>('welcome');
   const [name, setName] = useState(hasSave ? savedName : '');
@@ -148,6 +161,7 @@ export function TitleScreen({ hasSave, savedName, savedHandle = '', onStart }: P
               <div className="relative mx-auto h-56 w-full overflow-hidden rounded-3xl bg-[radial-gradient(ellipse_at_50%_90%,rgba(251,191,36,0.4),transparent_60%)] sm:h-64">
                 <ModelPreview modelKey="mini/female-a" anim="emote-yes" petKey="pet/dog" sway />
               </div>
+              <OnlineCount />
               <h2 className="font-display text-2xl font-extrabold">{hasSave ? `Olá de novo, ${savedName}!` : 'Pronto para viver na cidade?'}</h2>
               {hasSave && (
                 <button onClick={() => start(true)} style={{ animation: 'xx-pulse 2s infinite' }} className="xx-cta flex w-full items-center justify-center gap-2 px-5 py-4 text-lg font-extrabold">
