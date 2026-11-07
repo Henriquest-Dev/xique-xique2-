@@ -51,7 +51,8 @@ function DockButton({ icon, label, onClick, tone = '#eef1ff', badge }: { icon: s
 
 export function HUD({ state, nearby, position, heading, cameraMode, onOpen, onActivate, onCameraMode, recording, onRecord, clean, onClean }: Props) {
   const compact = useCompact();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [camOpen, setCamOpen] = useState(false);
+  const [seenChat, setSeenChat] = useState(state.chatMessages.length);
   const quest = state.quests.find((q) => q.status === 'active');
   const delivery = state.activeDelivery;
   const zone = getZoneAt(position.x, position.z);
@@ -82,7 +83,8 @@ export function HUD({ state, nearby, position, heading, cameraMode, onOpen, onAc
     { icon: 'user', label: 'Personagem', panel: 'avatar' },
     { icon: 'gear', label: 'Menu', panel: 'pause' },
   ];
-  const shown = compact && !menuOpen ? [dock[0], dock[1], dock[8]] : dock;
+  const unread = state.chatMessages.length > seenChat;
+  const shown = [dock[0], dock[1], { ...dock[2], badge: unread }, dock[8]];
 
   const hotbar = (['madeira', 'pedra', 'tabua', 'tijolo'] as ResourceId[]).map((id) => ({ id, n: eco.resources[id] }));
   const verb = nearby ? (nearby.kind === 'npc' ? 'Falar' : nearby.kind === 'bench' ? 'Sentar' : nearby.kind === 'box' ? 'Abrir' : nearby.kind === 'lot' ? 'Casa' : 'Entrar') : '';
@@ -122,10 +124,7 @@ export function HUD({ state, nearby, position, heading, cameraMode, onOpen, onAc
           <p className="px-1 pt-0.5 text-center text-[10px] font-extrabold leading-tight text-slate-200">{zone}</p>
         </div>
         <div className={`pointer-events-auto flex gap-1.5 ${compact ? 'flex-col items-end' : 'flex-col'}`}>
-          {shown.map((d) => <DockButton key={d.panel} icon={d.icon} label={d.label} tone={d.tone} badge={d.badge} onClick={() => (d.panel === 'pause' && compact && !menuOpen ? setMenuOpen(true) : onOpen(d.panel))} />)}
-          {compact && (
-            <button onClick={() => setMenuOpen((v) => !v)} className="chip flex h-10 w-12 items-center justify-center rounded-2xl text-white" aria-label="Mais"><Ico name={menuOpen ? 'close' : 'menu'} size={18} /></button>
-          )}
+          {shown.map((d) => <DockButton key={d.panel} icon={d.icon} label={d.label} tone={d.tone} badge={d.badge} onClick={() => { if (d.panel === 'phone') setSeenChat(state.chatMessages.length); onOpen(d.panel); }} />)}
         </div>
       </div>
 
@@ -191,8 +190,17 @@ export function HUD({ state, nearby, position, heading, cameraMode, onOpen, onAc
         <button onClick={onClean} aria-label="Esconder interface" title="Esconder interface" className="chip pointer-events-auto flex h-11 w-11 items-center justify-center rounded-2xl text-slate-200"><Ico name="eye" size={22} /></button>
       </div>
       {compact && (
-        <div className="pointer-events-auto absolute bottom-[9rem] right-3 flex flex-col gap-1.5">
-          <button onClick={() => onCameraMode(CAMERA_ORDER[(CAMERA_ORDER.indexOf(cameraMode) + 1) % CAMERA_ORDER.length])} className="chip flex h-11 items-center gap-1 rounded-2xl px-3 text-xs font-extrabold text-white"><Ico name="camera" size={16} />{CAM_SHORT[cameraMode]}</button>
+        <div className="pointer-events-auto absolute bottom-[9rem] right-3 flex flex-col items-end gap-1.5">
+          {camOpen && (
+            <div className="flex flex-col gap-1 rounded-2xl border-[3px] border-[#3c4686] bg-[#171c3d]/95 p-1 shadow-[0_4px_0_#0c1030]">
+              {(['first', 'shoulder', 'third', 'top'] as CameraMode[]).map((m) => (
+                <button key={m} onClick={() => { onCameraMode(m); setCamOpen(false); }} className={`flex h-10 items-center gap-2 rounded-xl px-3 text-xs font-extrabold ${cameraMode === m ? 'btn-primary' : 'text-slate-200'}`}>
+                  <Ico name="camera" size={14} />{CAMERA_LABELS[m]}
+                </button>
+              ))}
+            </div>
+          )}
+          <button onClick={() => setCamOpen((v) => !v)} aria-label="Escolher câmara" className="chip flex h-11 items-center gap-1 rounded-2xl px-3 text-xs font-extrabold text-white"><Ico name="camera" size={16} />{CAM_SHORT[cameraMode]}</button>
         </div>
       )}
     </div>

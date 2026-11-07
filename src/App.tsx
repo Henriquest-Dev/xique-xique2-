@@ -837,7 +837,7 @@ export default function App() {
               setPanel(to);
             }}
           />
-          <PhoneModal open={panel === 'phone'} onClose={closePanel} />
+          <PhoneModal open={panel === 'phone'} onClose={closePanel} onOpenApp={(p) => setPanel(p)} />
 
           <MapModal open={panel === 'map'} onClose={closePanel} position={position} onTravel={handleTravel} onGoto={(x, z) => { closePanel(); engineRef.current?.teleport(x, z + 2, true); }} />
 

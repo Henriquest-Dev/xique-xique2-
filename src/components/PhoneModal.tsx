@@ -4,14 +4,16 @@ import { gameState } from '../services/gameState';
 import { sound } from '../services/sound';
 import { Button, Modal, Pill, ProgressBar, SectionTitle, money } from './ui';
 import { GameIcon } from './GameIcon';
+import { Ico } from './Ico';
 
 interface Props {
   open: boolean;
   onClose: () => void;
+  onOpenApp?: (panel: string) => void;
 }
 
-export function PhoneModal({ open, onClose }: Props) {
-  const [tab, setTab] = useState<'chat' | 'stats' | 'quests' | 'settings' | 'save'>('chat');
+export function PhoneModal({ open, onClose, onOpenApp }: Props) {
+  const [tab, setTab] = useState<'home' | 'chat' | 'stats' | 'quests' | 'settings' | 'save'>('home');
   const [message, setMessage] = useState('');
   const state = gameState.getState();
 
@@ -36,6 +38,7 @@ export function PhoneModal({ open, onClose }: Props) {
     >
       <div className="mb-4 flex gap-1 overflow-x-auto rounded-xl border border-2 border-[#3c4686]/70 bg-[#0b0f2c] p-1">
         {[
+          { id: 'home' as const, label: 'Início', icon: <GameIcon name="phone" size={14} /> },
           { id: 'chat' as const, label: 'Chat', icon: <MessageCircle size={14} /> },
           { id: 'stats' as const, label: 'Estatísticas', icon: <BarChart3 size={14} /> },
           { id: 'quests' as const, label: 'Missões', icon: <Target size={14} /> },
@@ -53,6 +56,35 @@ export function PhoneModal({ open, onClose }: Props) {
           </button>
         ))}
       </div>
+
+      {tab === 'home' && (
+        <div className="mx-auto max-w-sm rounded-[2rem] border-4 border-[#3c4686] bg-gradient-to-b from-[#1b2150] to-[#0b0f2c] p-4 shadow-[0_6px_0_#0c1030]">
+          <div className="mb-3 flex items-center justify-between text-[10px] font-extrabold text-slate-300"><span>XiquePhone</span><span>{money(gameState.getState().wallet)}</span></div>
+          <div className="grid grid-cols-3 gap-3">
+            {([
+              { l: 'Banco', i: 'bank', c: '#5eea8d', p: 'bank' },
+              { l: 'Prefeitura', i: 'hall', c: '#93c5fd', p: 'prefeitura' },
+              { l: 'Prémio diário', i: 'gift', c: '#f9a8d4', p: 'petshop' },
+              { l: 'Jornal', i: 'paper', c: '#fcd34d', p: 'newspaper' },
+              { l: 'Personagem', i: 'user', c: '#c4b5fd', p: 'avatar' },
+              { l: 'Mapa', i: 'map', c: '#7dd3fc', p: 'map' },
+            ] as const).map((a) => (
+              <button key={a.p} onClick={() => { sound.playClick(); onOpenApp?.(a.p); }} className="flex flex-col items-center gap-1.5">
+                <span className="flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-white/10 bg-[#232a55] shadow-[0_3px_0_#0c1030]" style={{ color: a.c }}><Ico name={a.i as never} size={28} /></span>
+                <span className="text-[10px] font-extrabold text-slate-200">{a.l}</span>
+              </button>
+            ))}
+            {([
+              { l: 'Chat', t: 'chat' }, { l: 'Missões', t: 'quests' }, { l: 'Estatísticas', t: 'stats' }, { l: 'Definições', t: 'settings' }, { l: 'Guardar', t: 'save' },
+            ] as const).map((a) => (
+              <button key={a.t} onClick={() => { sound.playClick(); setTab(a.t); }} className="flex flex-col items-center gap-1.5">
+                <span className="flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-white/10 bg-[#2b2f66] text-[11px] font-extrabold text-amber-300 shadow-[0_3px_0_#0c1030]">{a.l.slice(0, 2).toUpperCase()}</span>
+                <span className="text-[10px] font-extrabold text-slate-200">{a.l}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {tab === 'chat' && (
         <div className="flex h-[420px] flex-col">

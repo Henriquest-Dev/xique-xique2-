@@ -181,7 +181,16 @@ export class GameEngine {
   private listeners: Array<() => void> = [];
   private resizeObserver: ResizeObserver | null = null;
   private lite = false;
+  private lightPool: THREE.PointLight[] = [];
+  private lightScan = 0;
+  private lightTick = 0;
   private pixelBudget = 1.6e6;
+  private maxBudget = 1.6e6;
+  private adaptT = 0;
+  private adaptN = 0;
+  private adaptAcc = 0;
+  private adaptGood = 0;
+  private lastFrameAt = 0;
 
   constructor(container: HTMLElement, callbacks: EngineCallbacks = {}) {
     this.container = container;
@@ -210,7 +219,8 @@ export class GameEngine {
         this.renderer = new THREE.WebGLRenderer({ antialias: false });
       }
       this.lite = lite;
-      this.pixelBudget = lite ? 0.8e6 : 1.6e6;
+      this.maxBudget = lite ? 0.6e6 : (window.matchMedia?.('(pointer: coarse)').matches ? 0.85e6 : 1.6e6);
+      this.pixelBudget = this.maxBudget;
       this.renderer.domElement.addEventListener('webglcontextlost', (e) => {
         e.preventDefault();
         this.cb.onError?.('A placa gráfica do aparelho ficou sem memória (contexto WebGL perdido). Feche outras abas e use o modo leve.');
@@ -231,7 +241,7 @@ export class GameEngine {
       this.scene.add(this.hemi);
       this.sun = new THREE.DirectionalLight('#fff3d6', 2.2);
       this.sun.castShadow = !lite;
-      this.sun.shadow.mapSize.set(lite ? 512 : 2048, lite ? 512 : 2048);
+      { const coarse = !!window.matchMedia?.("(pointer: coarse)").matches; const ms = lite ? 512 : coarse ? 1024 : 2048; this.sun.shadow.mapSize.set(ms, ms); }
       const sc = this.sun.shadow.camera;
       sc.left = -70;
       sc.right = 70;
@@ -296,6 +306,7 @@ export class GameEngine {
       if (this.disposed) return;
 
       this.applySettings(gameState.getState().settings);
+      this.trimShadowCasters();
       this.ready = true;
       if (import.meta.env.DEV) { (window as unknown as { __xx?: GameEngine }).__xx = this; (window as unknown as { __gs?: typeof gameState }).__gs = gameState; }
       this.cb.onProgress?.(100, 'Pronto!');
@@ -456,7 +467,8 @@ export class GameEngine {
     if (this.renderer) {
       this.renderer.shadowMap.enabled = high;
       this.sun.castShadow = high;
-      this.pixelBudget = this.lite ? 0.8e6 : high ? 1.6e6 : 1.0e6;
+      this.maxBudget = this.lite ? 0.6e6 : high ? (window.matchMedia?.('(pointer: coarse)').matches ? 0.85e6 : 1.6e6) : 0.6e6;
+      this.pixelBudget = Math.min(this.pixelBudget, this.maxBudget);
     }
     const showTags = settings.showTags !== false;
     const apply = (o: THREE.Object3D) => {
@@ -1377,6 +1389,92 @@ export class GameEngine {
   // ---------------------------------------------------------------------------
   // Loop
   // ---------------------------------------------------------------------------
+  /**
+   * Havia ~46 luzes de ponto ligadas ao mesmo tempo: cada uma multiplica o custo de TODOS os pixeis
+   * (insuportável em telemóveis). Mantém só as MAX_PT mais próximas do jogador ligadas, sempre o
+   * mesmo número (para o three.js não recompilar os shaders).
+   */
+  /** Em telemóveis só os objetos grandes (casas, árvores, veículos) e as personagens projetam sombra. */
+  private trimShadowCasters() {
+    const coarse = !!window.matchMedia?.('(pointer: coarse)').matches;
+    if (!this.lite && !coarse) return;
+    const minR = this.lite ? 4 : 1.6;
+    this.scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || !m.castShadow || (m as THREE.SkinnedMesh).isSkinnedMesh) return;
+      const geo = m.geometry;
+      if (!geo.boundingSphere) geo.computeBoundingSphere();
+      const s = m.getWorldScale(new THREE.Vector3());
+      const r = (geo.boundingSphere?.radius ?? 0) * Math.max(s.x, s.y, s.z);
+      if (r < minR) m.castShadow = false;
+    });
+  }
+
+  /**
+   * Qualidade adaptativa: mede os FPS e baixa a resolução (e por fim as sombras) em aparelhos fracos,
+   * para o jogo ficar sempre jogável; volta a subir se houver folga.
+   */
+  private adaptQuality() {
+    const now = performance.now();
+    const frame = this.lastFrameAt ? now - this.lastFrameAt : 0;
+    this.lastFrameAt = now;
+    if (!this.ready || this.paused || frame <= 0 || frame > 2000) return;
+    this.adaptT += frame;
+    this.adaptAcc += frame;
+    this.adaptN++;
+    if (this.adaptT < 2500) return;
+    const avg = this.adaptAcc / this.adaptN;
+    this.adaptT = this.adaptAcc = this.adaptN = 0;
+    const MIN = 0.3e6;
+    if (avg > 38) {
+      this.adaptGood = 0;
+      if (this.pixelBudget > MIN * 1.05) {
+        this.pixelBudget = Math.max(MIN, this.pixelBudget * 0.75);
+        this.resize();
+      } else if (this.renderer.shadowMap.enabled) {
+        this.renderer.shadowMap.enabled = false;
+        this.sun.castShadow = false;
+        this.scene.traverse((o) => { const m = (o as THREE.Mesh).material; if (m) (Array.isArray(m) ? m : [m]).forEach((mm) => { mm.needsUpdate = true; }); });
+      }
+    } else if (avg < 19 && this.pixelBudget < this.maxBudget) {
+      if (++this.adaptGood >= 4) {
+        this.adaptGood = 0;
+        this.pixelBudget = Math.min(this.maxBudget, this.pixelBudget * 1.2);
+        this.resize();
+      }
+    } else {
+      this.adaptGood = 0;
+    }
+  }
+
+  private updatePointLights(dt: number) {
+    const MAX_PT = this.lite ? 3 : 5;
+    this.lightScan -= dt;
+    if (this.lightScan <= 0) {
+      this.lightScan = 4;
+      const found: THREE.PointLight[] = [];
+      this.scene.traverse((o) => { if ((o as THREE.PointLight).isPointLight) found.push(o as THREE.PointLight); });
+      this.lightPool = found;
+    }
+    this.lightTick -= dt;
+    if (this.lightTick > 0) return;
+    this.lightTick = 0.3;
+    const px = this.pos.x, pz = this.pos.z;
+    const v = new THREE.Vector3();
+    const scored: { l: THREE.PointLight; d: number }[] = [];
+    for (const l of this.lightPool) {
+      let hidden = false;
+      for (let o: THREE.Object3D | null = l.parent; o; o = o.parent) { if (!o.visible) { hidden = true; break; } }
+      if (hidden) { l.visible = false; continue; }
+      l.getWorldPosition(v);
+      const dx = v.x - px, dz = v.z - pz;
+      // luzes com intensidade 0 (desligadas) só entram para fazer número se não houver mais nenhuma
+      scored.push({ l, d: dx * dx + dz * dz + (l.intensity > 0.01 ? 0 : 1e9) });
+    }
+    scored.sort((a, b) => a.d - b.d);
+    scored.forEach((s, i) => { s.l.visible = i < MAX_PT; });
+  }
+
   private resize() {
     if (!this.renderer) return;
     const w = Math.max(1, this.container.clientWidth);
@@ -1416,6 +1514,8 @@ export class GameEngine {
     }
     this.world?.update(dt, gameState.getState().timeOfDay, this.elapsed);
     this.updateLighting(dt);
+    this.updatePointLights(dt);
+    this.adaptQuality();
     this.updateCamera(dt);
 
     // mudanças de avatar/nome feitas no menu
