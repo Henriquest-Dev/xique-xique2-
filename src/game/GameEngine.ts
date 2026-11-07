@@ -14,6 +14,7 @@ import { buildCityExtras, type Extras } from './cityExtras';
 import { LIFE_NPCS } from './mapPoints';
 import { liveStore, SHOPS } from '../services/liveStore';
 import { animateActor, createActor, createCompanion, type Actor } from './actors';
+import { multiplayer, type RemoteState } from '../net/multiplayer';
 import { getSurfaceHeight, isWaterAt } from './terrain';
 import { vehicleById, type VehicleDef } from './vehicles';
 import { textBanner } from './adTexture';
@@ -342,6 +343,7 @@ export class GameEngine {
         this.trimShadowCasters();
       });
       this.ready = true;
+      void multiplayer.start();
       if (import.meta.env.DEV) { (window as unknown as { __xx?: GameEngine }).__xx = this; (window as unknown as { __gs?: typeof gameState }).__gs = gameState; }
       this.cb.onProgress?.(100, 'Pronto!');
       this.cb.onReady?.();
@@ -480,6 +482,87 @@ export class GameEngine {
       };
       rec.stop();
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Multiplayer: avatares dos outros jogadores
+  // ---------------------------------------------------------------------------
+  private remoteActors = new Map<string, { actor: Actor | null; tag: THREE.Sprite | null; loading: boolean; x: number; z: number; heading: number; speed: number; sig: string }>();
+  private static readonly REMOTE_RANGE = 140;
+
+  private selfNetInfo() {
+    const st = gameState.getState();
+    const a = st.avatar;
+    return {
+      h: st.playerHandle, n: st.playerName,
+      av: { a: a.assetId, st: a.spriteType, sk: a.skinColor, sh: a.shirtColor, pa: a.pantsColor, ha: a.hairColor, hat: a.hatStyle, fam: a.avatarFamily, comp: a.companionId },
+      x: this.pos.x, z: this.pos.z, r: this.heading, s: this.speed, v: this.vehicle?.id ?? null,
+    };
+  }
+
+  private async spawnRemote(id: string, st: RemoteState) {
+    const ra = this.remoteActors.get(id);
+    if (!ra || ra.loading) return;
+    ra.loading = true;
+    try {
+      const actor = await createActor({
+        avatarFamily: (st.av.fam as AvatarConfig['avatarFamily']) || 'mini', assetId: st.av.a, representation: '3d', rigAdapter: 'humanoid', name: st.n,
+        skinColor: st.av.sk, shirtColor: st.av.sh, pantsColor: st.av.pa, hairColor: st.av.ha, hatStyle: (st.av.hat as AvatarConfig['hatStyle']) || 'none',
+        companionId: 'none', spriteType: st.av.st as AvatarConfig['spriteType'],
+      });
+      const cur = this.remoteActors.get(id);
+      if (!cur || this.disposed) return;                       // o jogador saiu enquanto carregava
+      actor.group.position.set(cur.x, this.groundHeight(cur.x, cur.z), cur.z);
+      this.scene.add(actor.group);
+      const tag = createTextSprite('@' + (st.h || st.n || 'jogador'), { scale: 0.0075, fontSize: 40, background: 'rgba(43,47,119,0.92)', accent: '#34d399' });
+      tag.position.y = actor.height + 0.55;
+      actor.group.add(tag);
+      cur.actor = actor; cur.tag = tag;
+    } catch (e) { console.warn('avatar remoto falhou', e); }
+    finally { const cur = this.remoteActors.get(id); if (cur) cur.loading = false; }
+  }
+
+  private removeRemote(id: string) {
+    const ra = this.remoteActors.get(id);
+    if (!ra) return;
+    if (ra.actor) this.scene.remove(ra.actor.group);
+    ra.tag?.material.map?.dispose(); ra.tag?.material.dispose();
+    this.remoteActors.delete(id);
+  }
+
+  private updateRemotes(dt: number) {
+    multiplayer.tick(this.selfNetInfo());
+    const list = multiplayer.players();
+    const alive = new Set<string>();
+    // só os mais próximos são desenhados (poupa GPU/CPU no telemóvel)
+    const near = list
+      .map((p) => ({ p, d: (p.x - this.pos.x) ** 2 + (p.z - this.pos.z) ** 2 }))
+      .filter((e) => e.d < GameEngine.REMOTE_RANGE ** 2)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 24);
+    for (const { p } of near) {
+      alive.add(p.id);
+      let ra = this.remoteActors.get(p.id);
+      const sig = `${p.av.a}|${p.av.sk}|${p.av.sh}|${p.av.pa}|${p.av.ha}|${p.av.hat}|${p.n}|${p.h}`;
+      if (ra && ra.sig !== sig) { this.removeRemote(p.id); ra = undefined; }      // mudou de avatar
+      if (!ra) {
+        ra = { actor: null, tag: null, loading: false, x: p.x, z: p.z, heading: p.r, speed: 0, sig };
+        this.remoteActors.set(p.id, ra);
+        void this.spawnRemote(p.id, p);
+      }
+      const k = Math.min(1, dt * 9);                                    // suaviza os 8 Hz da rede
+      const dx = p.x - ra.x, dz = p.z - ra.z;
+      if (dx * dx + dz * dz > 40 * 40) { ra.x = p.x; ra.z = p.z; } else { ra.x += dx * k; ra.z += dz * k; }
+      let dh = p.r - ra.heading; while (dh > Math.PI) dh -= Math.PI * 2; while (dh < -Math.PI) dh += Math.PI * 2;
+      ra.heading += dh * k;
+      ra.speed += (p.s - ra.speed) * k;
+      if (ra.actor) {
+        ra.actor.group.position.set(ra.x, this.groundHeight(ra.x, ra.z), ra.z);
+        ra.actor.group.rotation.y = ra.heading;
+        animateActor(ra.actor, dt, ra.speed, ra.speed > 5, 0);
+      }
+    }
+    for (const id of [...this.remoteActors.keys()]) if (!alive.has(id)) this.removeRemote(id);
   }
 
   // ---------------------------------------------------------------------------
@@ -807,6 +890,8 @@ export class GameEngine {
     this.world?.dispose();
     this.unsubLive?.();
     this.unsubLots?.();
+    multiplayer.stop();
+    for (const id of [...this.remoteActors.keys()]) this.removeRemote(id);
     this.traffic = null;
     sound.setAmbient(false);
     if (this.renderer) {
@@ -1639,6 +1724,7 @@ export class GameEngine {
     this.updatePointLights(dt);
     this.adaptQuality();
     this.updatePlates(dt);
+    this.updateRemotes(dt);
     if (this.aerial) this.updateAerial(dt); else this.updateCamera(dt);
 
     // mudanças de avatar/nome feitas no menu

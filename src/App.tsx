@@ -34,6 +34,7 @@ import { GameIcon } from './components/GameIcon';
 import { ShoppingModal } from './components/ShoppingModal';
 import { PetShopModal } from './components/PetShopModal';
 import { liveStore } from './services/liveStore';
+import { multiplayer } from './net/multiplayer';
 import { economy } from './services/economy';
 import { ledger } from './data';
 import { BankModal } from './components/BankModal';
@@ -102,6 +103,8 @@ export default function App() {
   const [recording, setRecording] = useState(false);
   const [clean, setClean] = useState(false);
   const [filming, setFilming] = useState(false);
+  const [net, setNet] = useState({ status: multiplayer.status, online: multiplayer.online, room: multiplayer.room, mode: multiplayer.mode });
+  useEffect(() => multiplayer.subscribe(() => setNet({ status: multiplayer.status, online: multiplayer.online, room: multiplayer.room, mode: multiplayer.mode })), []);
   const [recFile, setRecFile] = useState<{ url: string; name: string; seconds: number } | null>(null);
   const [industry, setIndustry] = useState<IndustryKind | null>(null);
   const [jobTab, setJobTab] = useState<JobTab>('bakery');
@@ -863,6 +866,14 @@ export default function App() {
               else gameState.toast('Não foi possível filmar agora (o navegador pode não suportar gravação).', 'warning');
             }}
           />
+
+          {!filming && net.status !== 'off' && (
+            <div className="pointer-events-none absolute left-1/2 top-[max(0.4rem,env(safe-area-inset-top))] z-30 -translate-x-1/2">
+              <span className={`rounded-full border-2 px-2.5 py-0.5 text-[10px] font-extrabold ${net.status === 'online' ? 'border-emerald-300/60 bg-emerald-500/20 text-emerald-200' : net.status === 'error' ? 'border-red-300/60 bg-red-500/20 text-red-200' : 'border-slate-400/50 bg-slate-700/60 text-slate-200'}`}>
+                {net.status === 'online' ? (net.mode === 'local' ? `Offline · só neste aparelho` : `Online · ${net.online} na sala`) : net.status === 'error' ? 'Sem multiplayer' : 'A ligar…'}
+              </span>
+            </div>
+          )}
 
           {filming && (
             <div className="pointer-events-none absolute inset-x-0 top-[max(0.75rem,env(safe-area-inset-top))] z-50 flex justify-center px-3">
