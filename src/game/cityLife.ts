@@ -557,6 +557,35 @@ export function buildCityLife(ctx: LifeCtx) {
     turbines.forEach((r, i) => { r.rotation.z += _d * wind * 0.16 * (1 + (i % 3) * 0.04); });
   });
 
+  // ============================================================ XIQUE MOTORS (concessionária)
+  {
+    const spot = findSpot(90, 60, 30, 160) ?? findSpot(-90, 60, 30, 160) ?? findSpot(0, 150, 30, 160);
+    if (spot) {
+      const { x, z } = spot;
+      const y = yAt(x, z);
+      const g = new THREE.Group();
+      g.position.set(x, y, z);
+      box(30, 0.5, 24, '#cbd5e1', 0, 0.25, 0, g);
+      box(20, 6, 12, '#1e293b', 0, 3.5, -4, g); // showroom
+      const glass = new THREE.Mesh(new THREE.BoxGeometry(19.2, 4.6, 0.3), new THREE.MeshStandardMaterial({ color: '#7dd3fc', emissive: '#38bdf8', emissiveIntensity: 0.6, transparent: true, opacity: 0.75 }));
+      glass.position.set(0, 3.4, 2.1);
+      g.add(glass);
+      box(21, 0.8, 13, '#ef4444', 0, 6.7, -4, g); // telhado vermelho
+      const carColors = ['#ef4444', '#3b82f6', '#facc15'];
+      carColors.forEach((c, i) => {
+        const cx = -8 + i * 8;
+        box(4.4, 0.9, 2, c, cx, 1.2, 8, g);
+        box(2.4, 0.8, 1.8, '#bfdbfe', cx - 0.2, 2, 8, g);
+        [[-1.5, -0.9], [1.5, -0.9], [-1.5, 0.9], [1.5, 0.9]].forEach(([wx, wz]) => cyl(0.45, 0.45, 0.4, '#0f172a', cx + wx, 0.75, 8 + wz, g, 10));
+      });
+      group.add(g);
+      colliders.push({ minX: x - 10.5, maxX: x + 10.5, minZ: z - 10.5, maxZ: z + 2.5, tag: 'static' });
+      label('Xique Motors', x, 9.5, z - 4, 0.022);
+      portals.push({ id: 'int:concessionaria', title: 'Xique Motors', subtitle: 'Comprar o teu carro', x, z: z + 5.5, radius: 5.5 });
+      LIFE_REPORT.motors = { x, z };
+    } else LIFE_REPORT.motors = 'sem espaço';
+  }
+
   // ===================================================================== USINA
   {
     const spot = findSpot(-110, -430, 26, 140) ?? findSpot(120, -430, 26, 140) ?? findSpot(-330, -380, 26, 120);

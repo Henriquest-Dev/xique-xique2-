@@ -6,6 +6,7 @@ import { gameState } from '../services/gameState';
 import { CROPS } from '../game/constants';
 import { Button, Modal, Pill, SectionTitle, money } from './ui';
 import { GameIcon } from './GameIcon';
+import { finance } from '../finance';
 
 interface Props {
   lot: LotData | null;
@@ -337,7 +338,8 @@ export function LotModal({ lot, onClose, onEnter }: Props) {
               className="w-full text-rose-200"
               onClick={() => {
                 if (window.confirm(`Vender o lote #${lot.id} por ${money(lot.price * 0.6)}? Os móveis são perdidos.`)) {
-                  gameState.sellHouse(lot.id);
+                  const r = finance.sellLotToCity(lot.id);
+                  gameState.toast(r.message, r.ok ? 'success' : 'warning');
                 }
               }}
               icon={<Trash2 size={15} />}

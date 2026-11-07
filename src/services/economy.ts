@@ -6,9 +6,10 @@
 
 import { gameState } from './gameState';
 import { sound } from './sound';
+import { LICENSE_RULES } from '../finance/catalog';
 
 export type ResourceId = 'madeira' | 'pedra' | 'tabua' | 'tijolo' | 'cenoura';
-export type LicenseId = 'comercio' | 'industria' | 'transporte' | 'agro' | 'importacao';
+export type LicenseId = 'comercio' | 'industria' | 'transporte' | 'agro' | 'importacao' | 'obra' | 'motorista';
 
 export const RESOURCES: Record<ResourceId, { name: string; icon: string; base: number }> = {
   madeira: { name: 'Madeira', icon: 'wood', base: 12 },
@@ -32,6 +33,8 @@ export const LICENSES: LicenseDef[] = [
   { id: 'industria', name: 'Licença Industrial', desc: 'Permite transformar madeira e pedra na Fábrica Central.', price: 900, materials: { madeira: 20, pedra: 10 } },
   { id: 'transporte', name: 'Licença de Transporte', desc: 'Frotas de camiões, barcos e comboios de carga.', price: 1200, materials: { tabua: 5, tijolo: 3 } },
   { id: 'importacao', name: 'Licença de Importação', desc: 'Comércio entre biomas e mercadorias reguladas.', price: 2500, materials: { tijolo: 10, tabua: 10 } },
+  { id: 'obra', name: 'Alvará de Obra', desc: 'Obrigatório para comprar um terreno marcado e construir a tua casa. Válido 60 dias.', price: 300, materials: {} },
+  { id: 'motorista', name: 'Carta de Condução', desc: 'Obrigatória para comprar carros na Xique Motors. Válida 90 dias.', price: 150, materials: {} },
 ];
 
 export const CRAFT = {
@@ -45,7 +48,7 @@ const BAN_ROTATION: ResourceId[] = ['cenoura', 'madeira', 'pedra', 'tabua', 'tij
 export interface Econ {
   resources: Record<ResourceId, number>;
   bank: { open: boolean; accountNo: string; checking: number; savings: number; lastAccrual: number; interestEarned: number };
-  licenses: Partial<Record<LicenseId, { issuedAt: number; company: string }>>;
+  licenses: Partial<Record<LicenseId, { issuedAt: number; company: string; expiresAt?: number }>>;
   /** residências compradas em reinos fechados (id do reino -> data) */
   residency: Record<string, number>;
   cooldowns: Record<string, number>;
@@ -261,19 +264,34 @@ class EconomyStore {
   }
 
   // -------------------------------------------------------------- licenças
+  /** Válida = existe e não expirou (licenças antigas sem data ficam válidas). */
   hasLicense(id: LicenseId) {
-    return Boolean(this.s.licenses[id]);
+    const l = this.s.licenses[id];
+    return Boolean(l) && (!l!.expiresAt || l!.expiresAt > Date.now());
+  }
+  licenseExpiry(id: LicenseId): number | null {
+    return this.s.licenses[id]?.expiresAt ?? null;
   }
   issueLicense(id: LicenseId, company: string): { ok: boolean; message: string } {
     const def = LICENSES.find((l) => l.id === id);
     if (!def) return { ok: false, message: 'Licença desconhecida.' };
-    if (this.hasLicense(id)) return { ok: false, message: 'Já tens esta licença.' };
-    const name = company.trim().slice(0, 32);
+    if (this.hasLicense(id)) return { ok: false, message: 'Já tens esta licença válida.' };
+    const rule = LICENSE_RULES[id];
+    const expired = this.s.licenses[id];
+    const name = (expired?.company ?? company).trim().slice(0, 32);
     if (name.length < 3) return { ok: false, message: 'Dá um nome à tua empresa (mín. 3 letras).' };
+    if (expired) {
+      // renovação: mais barata e sem materiais
+      const fee = Math.round(def.price * (rule?.renewPct ?? 0.5));
+      if (!gameState.spendMoney(fee, `Licença (renovação): ${def.name}`)) return { ok: false, message: `Saldo insuficiente para renovar (X$ ${fee}).` };
+      expired.expiresAt = Date.now() + (rule?.validDays ?? 30) * 86_400_000;
+      this.commit();
+      return { ok: true, message: `Licença renovada por mais ${rule?.validDays ?? 30} dias.` };
+    }
     for (const [k, n] of Object.entries(def.materials)) if (!this.has(k as ResourceId, n as number)) return { ok: false, message: `Faltam materiais: ${n}× ${RESOURCES[k as ResourceId].name}.` };
     if (!gameState.spendMoney(def.price, `Licença: ${def.name}`)) return { ok: false, message: 'Saldo insuficiente.' };
     for (const [k, n] of Object.entries(def.materials)) this.s.resources[k as ResourceId] -= n as number;
-    this.s.licenses[id] = { issuedAt: Date.now(), company: name };
+    this.s.licenses[id] = { issuedAt: Date.now(), company: name, expiresAt: Date.now() + (rule?.validDays ?? 30) * 86_400_000 };
     gameState.recordCityEvent('obra', `${gameState.getState().playerName} (@${gameState.getState().playerHandle}) abriu a empresa “${name}”.`);
     sound.playBuild();
     this.commit();

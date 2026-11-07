@@ -4,11 +4,13 @@ import { economy } from '../services/economy';
 import { Button, Modal, SectionTitle, money } from './ui';
 import { GameIcon } from './GameIcon';
 import { Ico } from './Ico';
+import { TransferPanel, CreditPanel } from './FinancePanels';
 
 export function BankModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   const [amount, setAmount] = useState('100');
   const [msg, setMsg] = useState('');
+  const [tab, setTab] = useState<'conta' | 'transferir' | 'credito'>('conta');
   useEffect(() => economy.subscribe(rerender), []);
   useEffect(() => {
     if (!open) return;
@@ -47,6 +49,14 @@ export function BankModal({ open, onClose }: { open: boolean; onClose: () => voi
             <p className="mt-3 text-[11px] text-white/80">Juros ganhos até hoje: {money(b.interestEarned)} · rende até X$ 10.000 de poupança</p>
           </div>
 
+          <div className="flex gap-1.5 rounded-2xl bg-[#0b0f2c] p-1.5">
+            {([['conta', 'Conta'], ['transferir', 'Transferir'], ['credito', 'Crédito']] as const).map(([id, label]) => (
+              <button key={id} onClick={() => setTab(id)} className={`flex-1 rounded-xl px-3 py-2 text-xs font-extrabold transition ${tab === id ? 'bg-amber-400 text-[#23180a]' : 'text-slate-400 hover:text-white'}`}>{label}</button>
+            ))}
+          </div>
+          {tab === 'transferir' && <TransferPanel />}
+          {tab === 'credito' && <CreditPanel />}
+          {tab === 'conta' && <>
           <div className="rounded-2xl border border-2 border-[#3c4686]/70 bg-[#10153a] p-3">
             <SectionTitle>Operação</SectionTitle>
             <div className="mb-2 flex flex-wrap gap-1.5">
@@ -76,6 +86,7 @@ export function BankModal({ open, onClose }: { open: boolean; onClose: () => voi
               ))}
             </ul>
           </div>
+          </>}
         </div>
       )}
     </Modal>

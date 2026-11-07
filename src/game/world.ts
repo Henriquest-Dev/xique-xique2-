@@ -39,7 +39,7 @@ import {
   WORLD_BOUNDS,
   getZoneAt,
 } from './constants';
-import { getBeachWidth, getCoastInfo, getTerrainHeight, isInsideLagoon, isWaterAt } from './terrain';
+import { getBeachWidth, getCoastInfo, getTerrainHeight, isInsideLagoon, isWaterAt, getSlopeAt } from './terrain';
 import { FarmPlot, LotData } from '../types/game';
 
 export interface Collider {
@@ -59,6 +59,8 @@ export interface BuiltWorld {
   benches: { x: number; y: number; z: number; rot: number }[];
   update: (dt: number, timeOfDay: number, elapsed: number) => void;
   refreshHouses: (lots: LotData[]) => void;
+  /** pode-se construir aqui? (não é estrada, água, edifício nem terreno inclinado) */
+  isBuildable: (x: number, z: number, half?: number) => { ok: boolean; reason?: string };
   setCrops: (plots: FarmPlot[]) => void;
   setDeliveryBeacon: (x: number | null, z: number | null) => void;
   setHover: (x: number | null, z: number | null, radius: number) => void;
@@ -1459,6 +1461,14 @@ export async function buildWorld(getLots: () => LotData[]): Promise<BuiltWorld> 
     benches,
     update,
     refreshHouses: buildHouseLayer,
+    isBuildable: (x, z, half = 7) => {
+      if (isWaterAt(x, z)) return { ok: false, reason: 'Isto é água ou praia: não se pode construir.' };
+      if (getSlopeAt(x, z) > 0.35) return { ok: false, reason: 'Terreno demasiado inclinado.' };
+      const hit = (r: { minX: number; maxX: number; minZ: number; maxZ: number }) => x + half > r.minX && x - half < r.maxX && z + half > r.minZ && z - half < r.maxZ;
+      if (roadRects.some(hit)) return { ok: false, reason: 'Isto é uma estrada ou passeio.' };
+      if (colliders.some((c) => hit(c))) return { ok: false, reason: 'Já existe um edifício ou objeto aqui.' };
+      return { ok: true };
+    },
     setCrops: applyCrops,
     setDeliveryBeacon: (x, z) => {
       if (x === null || z === null) {

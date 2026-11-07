@@ -18,7 +18,8 @@ export interface Account {
 
 export type TxCategory =
   | 'quest' | 'job' | 'sale' | 'purchase' | 'furniture' | 'property' | 'fare' | 'tax' | 'license'
-  | 'residency' | 'fine' | 'interest' | 'deposit' | 'withdraw' | 'rent' | 'transfer' | 'refund' | 'opening' | 'other';
+  | 'residency' | 'fine' | 'interest' | 'deposit' | 'withdraw' | 'rent' | 'transfer' | 'refund' | 'opening' | 'other'
+  | 'loan' | 'repay' | 'fee' | 'vehicle' | 'seizure';
 
 /** Uma linha do extrato (dupla entrada: cada transferência gera um débito e um crédito). */
 export interface LedgerEntry {

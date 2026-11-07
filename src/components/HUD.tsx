@@ -38,6 +38,19 @@ function useCompact() {
   return compact;
 }
 
+/** Telemóvel deitado (horizontal): pouca altura, a interface passa a usar a largura. */
+function useShort() {
+  const get = () => typeof window !== 'undefined' && window.innerHeight < 480 && window.innerWidth > window.innerHeight;
+  const [v, setV] = useState(get);
+  useEffect(() => {
+    const on = () => setV(get());
+    window.addEventListener('resize', on);
+    window.addEventListener('orientationchange', on);
+    return () => { window.removeEventListener('resize', on); window.removeEventListener('orientationchange', on); };
+  }, []);
+  return v;
+}
+
 const CAM_SHORT: Record<CameraMode, string> = { first: '1', shoulder: '2', third: '3', top: 'Topo' };
 
 function DockButton({ icon, label, onClick, tone = '#eef1ff', badge }: { icon: string; label: string; onClick?: () => void; tone?: string; badge?: boolean }) {
@@ -51,6 +64,7 @@ function DockButton({ icon, label, onClick, tone = '#eef1ff', badge }: { icon: s
 
 export function HUD({ state, nearby, position, heading, cameraMode, onOpen, onActivate, onCameraMode, recording, onRecord, clean, onClean }: Props) {
   const compact = useCompact();
+  const short = useShort();
   const [camOpen, setCamOpen] = useState(false);
   const [seenChat, setSeenChat] = useState(state.chatMessages.length);
   const quest = state.quests.find((q) => q.status === 'active');
@@ -118,12 +132,12 @@ export function HUD({ state, nearby, position, heading, cameraMode, onOpen, onAc
       </div>
 
       {/* Minimapa + dock */}
-      <div className="absolute right-3 top-3 flex flex-col items-end gap-2 sm:right-4 sm:top-4">
+      <div className={`absolute right-3 top-3 flex gap-2 sm:right-4 sm:top-4 ${short ? 'flex-row-reverse items-start' : 'flex-col items-end'}`}>
         <div className="pointer-events-auto rounded-[22px] border-[3px] border-[#3c4686] bg-[#171c3d] p-1 shadow-[0_4px_0_#0c1030]">
           <Minimap x={position.x} z={position.z} heading={heading} lots={state.lots} size={compact ? 92 : 132} />
           <p className="px-1 pt-0.5 text-center text-[10px] font-extrabold leading-tight text-slate-200">{zone}</p>
         </div>
-        <div className={`pointer-events-auto flex gap-1.5 ${compact ? 'flex-col items-end' : 'flex-col'}`}>
+        <div className={`pointer-events-auto flex gap-1.5 ${short ? 'flex-row' : compact ? 'flex-col items-end' : 'flex-col'}`}>
           {shown.map((d) => <DockButton key={d.panel} icon={d.icon} label={d.label} tone={d.tone} badge={d.badge} onClick={() => { if (d.panel === 'phone') setSeenChat(state.chatMessages.length); onOpen(d.panel); }} />)}
         </div>
       </div>
@@ -167,7 +181,7 @@ export function HUD({ state, nearby, position, heading, cameraMode, onOpen, onAc
       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 sm:bottom-4">
         <div className="pointer-events-auto flex items-end gap-1.5 rounded-[22px] border-[3px] border-[#3c4686] bg-[#171c3d]/95 p-1.5 shadow-[0_4px_0_#0c1030]">
           {hotbar.map((h, i) => (
-            <button key={h.id} onClick={() => onOpen('backpack')} className="relative hidden sm:flex h-12 w-12 flex-col items-center justify-center rounded-xl border-2 border-[#3c4686] bg-[#232a55] text-white transition hover:border-[#ffd44d] sm:h-14 sm:w-14" title={RESOURCES[h.id].name}>
+            <button key={h.id} onClick={() => onOpen('backpack')} className={`relative ${compact ? 'hidden' : 'flex'} h-12 w-12 flex-col items-center justify-center rounded-xl border-2 border-[#3c4686] bg-[#232a55] text-white transition hover:border-[#ffd44d] sm:h-14 sm:w-14`} title={RESOURCES[h.id].name}>
               <span className="absolute left-1 top-0.5 text-[9px] font-extrabold text-slate-400">{i + 1}</span>
               <span className="text-[#ffd44d]"><Ico name={h.id === 'tabua' ? 'plank' : h.id === 'tijolo' ? 'brick' : h.id === 'madeira' ? 'wood' : 'stone'} size={24} /></span>
               <span className="text-[11px] font-extrabold leading-none">{h.n}</span>
@@ -190,7 +204,7 @@ export function HUD({ state, nearby, position, heading, cameraMode, onOpen, onAc
         <button onClick={onClean} aria-label="Esconder interface" title="Esconder interface" className="chip pointer-events-auto flex h-11 w-11 items-center justify-center rounded-2xl text-slate-200"><Ico name="eye" size={22} /></button>
       </div>
       {compact && (
-        <div className="pointer-events-auto absolute bottom-[9rem] right-3 flex flex-col items-end gap-1.5">
+        <div className={`pointer-events-auto absolute flex flex-col items-end gap-1.5 ${short ? 'bottom-4 right-[8.5rem]' : 'bottom-[9rem] right-3'}`}>
           {camOpen && (
             <div className="flex flex-col gap-1 rounded-2xl border-[3px] border-[#3c4686] bg-[#171c3d]/95 p-1 shadow-[0_4px_0_#0c1030]">
               {(['first', 'shoulder', 'third', 'top'] as CameraMode[]).map((m) => (

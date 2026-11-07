@@ -21,19 +21,41 @@ export interface LedgerStore {
   save(s: LedgerSnapshot): void;
 }
 
+/** Assinatura simples (FNV-1a duplo). Deteta edições casuais do localStorage; NÃO substitui o servidor. */
+function sign(text: string): string {
+  let a = 0x811c9dc5, b = 0x9747b28c;
+  const salted = `xx2|${text}|v1`;
+  for (let i = 0; i < salted.length; i++) {
+    const c = salted.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193) >>> 0;
+    b = Math.imul(b ^ (c + i), 0x85ebca6b) >>> 0;
+  }
+  return a.toString(36) + b.toString(36);
+}
+
 export class LocalLedgerStore implements LedgerStore {
+  /** true se o save foi alterado fora do jogo (ledger ignorado e recomeçado) */
+  tampered = false;
   constructor(private key = 'xx2_ledger_v1') {}
   load() {
     try {
       const raw = localStorage.getItem(this.key);
-      return raw ? (JSON.parse(raw) as LedgerSnapshot) : null;
+      if (!raw) return null;
+      const sig = localStorage.getItem(this.key + '_sig');
+      if (sig && sig !== sign(raw)) {
+        this.tampered = true;
+        return null;
+      }
+      return JSON.parse(raw) as LedgerSnapshot;
     } catch {
       return null;
     }
   }
   save(s: LedgerSnapshot) {
     try {
-      localStorage.setItem(this.key, JSON.stringify(s));
+      const raw = JSON.stringify(s);
+      localStorage.setItem(this.key, raw);
+      localStorage.setItem(this.key + '_sig', sign(raw));
     } catch {
       /* sem espaço */
     }

@@ -5,8 +5,10 @@ import { Button, Modal, Pill, SectionTitle, money } from './ui';
 import { GameIcon } from './GameIcon';
 import { Ico } from './Ico';
 import { ledger } from '../data';
+import { finance, playerPos } from '../finance';
+import { LAND } from '../finance/catalog';
 
-type Tab = 'licencas' | 'lotes' | 'leis';
+type Tab = 'licencas' | 'lotes' | 'terreno' | 'leis';
 
 export function PrefeituraModal({ open, onClose, onVote, onLot, onCampaigns }: { open: boolean; onClose: () => void; onVote: () => void; onCampaigns?: () => void; onLot: (id: number) => void }) {
   const [, rerender] = useReducer((n: number) => n + 1, 0);
@@ -28,7 +30,7 @@ export function PrefeituraModal({ open, onClose, onVote, onLot, onCampaigns }: {
   const mine = st.lots.filter((l) => l.ownerId === 'player');
   const free = st.lots.filter((l) => !l.ownerId && (sector === 'all' || l.sector === sector || (sector === 'park' && l.id > 100 && l.id < 200) || (sector === 'condo' && l.id >= 200))).slice(0, 40);
   const banned = economy.bannedToday();
-  const tabs: [Tab, string][] = [['licencas', 'Licenças'], ['lotes', 'Lotes'], ['leis', 'Leis & Mercadorias']];
+  const tabs: [Tab, string][] = [['licencas', 'Licenças'], ['lotes', 'Lotes'], ['terreno', 'Terrenos'], ['leis', 'Leis']];
 
   return (
     <Modal open={open} onClose={onClose} title="Prefeitura Municipal" subtitle="Cartório, licenças de empresa, leilão de lotes e leis da cidade" icon={<GameIcon name="cityhall" size={22} className="text-amber-300" />} width="max-w-4xl"
@@ -48,6 +50,8 @@ export function PrefeituraModal({ open, onClose, onVote, onLot, onCampaigns }: {
           </label>
           {LICENSES.map((l) => {
             const own = e.licenses[l.id];
+            const valid = economy.hasLicense(l.id);
+            const exp = economy.licenseExpiry(l.id);
             return (
               <div key={l.id} className={`rounded-2xl border p-3 ${own ? 'border-emerald-400/40 bg-emerald-400/5' : 'border-2 border-[#3c4686]/70 bg-[#10153a]'}`}>
                 <div className="flex items-start justify-between gap-2">
@@ -59,7 +63,7 @@ export function PrefeituraModal({ open, onClose, onVote, onLot, onCampaigns }: {
                       {Object.entries(l.materials).map(([k, n]) => ` · ${n}× ${RESOURCES[k as keyof typeof RESOURCES].name}`)}
                     </p>
                   </div>
-                  {own ? <Pill tone="good">{own.company}</Pill> : <Button className="shrink-0 px-3 py-1.5 text-xs" onClick={() => setMsg(economy.issueLicense(l.id, company).message)}>Emitir</Button>}
+                  {own && valid ? <Pill tone="good">{own.company}{exp ? ` · até ${new Date(exp).toLocaleDateString('pt-PT')}` : ''}</Pill> : own ? <Button className="shrink-0 px-3 py-1.5 text-xs" onClick={() => setMsg(economy.issueLicense(l.id, company).message)}>Renovar</Button> : <Button className="shrink-0 px-3 py-1.5 text-xs" onClick={() => setMsg(economy.issueLicense(l.id, company).message)}>Emitir</Button>}
                 </div>
               </div>
             );
@@ -82,7 +86,7 @@ export function PrefeituraModal({ open, onClose, onVote, onLot, onCampaigns }: {
                     <p className="text-[11px] text-slate-400">Avaliação da Prefeitura: <b className="text-amber-300">{money(appraisal)}</b> ({furn} móveis)</p>
                     <div className="mt-2 flex gap-2">
                       <Button variant="ghost" className="px-3 py-1.5 text-xs" onClick={() => onLot(l.id)}>Abrir</Button>
-                      <Button className="px-3 py-1.5 text-xs" onClick={() => { if (window.confirm(`Vender o lote #${l.id} à Prefeitura por ${money(appraisal)}?`)) { gameState.sellHouse(l.id); gameState.addMoney(furn * 25, 'Bónus de avaliação', true); } }}>Vender</Button>
+                      <Button className="px-3 py-1.5 text-xs" onClick={() => { if (window.confirm(`Vender o lote #${l.id} à Prefeitura por ${money(appraisal)}?`)) { const r = finance.sellLotToCity(l.id); setMsg(r.message); } }}>Vender</Button>
                     </div>
                   </div>
                 );
@@ -106,6 +110,32 @@ export function PrefeituraModal({ open, onClose, onVote, onLot, onCampaigns }: {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {tab === 'terreno' && (
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-sky-400/30 bg-sky-400/10 p-3 text-xs text-sky-100">
+            <p className="font-extrabold">Como comprar um terreno onde tu queres</p>
+            <ol className="mt-1 list-decimal space-y-0.5 pl-4 text-[11px] text-sky-100/90">
+              <li>Tira o <b>Alvará de Obra</b> (separador Licenças).</li>
+              <li>Vai ao sítio que queres e toca em <b>Marcar onde estou</b> (aqui ou no telefone → Marcar).</li>
+              <li>Volta à Prefeitura e compra o terreno marcado. A casa é construída logo.</li>
+            </ol>
+            <p className="mt-1.5 text-[11px]">Não dá para marcar estradas, praias, edifícios nem a menos de {LAND.minSpacing} m de outro lote. A marcação dura {LAND.stakeTtlHours} h; máximo {LAND.maxStakes}.</p>
+          </div>
+          <Button className="w-full" onClick={() => { const r = finance.markStake(playerPos.x, playerPos.z); setMsg(r.message); }}>Marcar onde estou ({Math.round(playerPos.x)}, {Math.round(playerPos.z)}) — X$ {finance.landPrice(playerPos.x, playerPos.z)}</Button>
+          <SectionTitle>Terrenos marcados</SectionTitle>
+          {finance.state.stakes.length === 0 && <p className="text-xs text-slate-400">Sem marcações. O alvará de obra está {economy.hasLicense('obra') ? 'válido' : 'em falta'}.</p>}
+          {finance.state.stakes.map((s) => (
+            <div key={s.id} className="flex items-center justify-between gap-2 rounded-2xl border border-2 border-[#3c4686]/70 bg-[#10153a] p-3">
+              <div><p className="text-sm font-bold text-white">({s.x}, {s.z})</p><p className="text-[11px] text-slate-400">Expira em {Math.max(0, Math.round((s.expiresAt - Date.now()) / 3_600_000))} h · preço <b className="text-amber-300">{money(finance.landPrice(s.x, s.z))}</b></p></div>
+              <div className="flex gap-1.5">
+                <Button className="px-3 py-1.5 text-xs" onClick={() => setMsg(finance.buyStake(s.id).message)}>Comprar</Button>
+                <Button variant="ghost" className="px-3 py-1.5 text-xs" onClick={() => { finance.removeStake(s.id); rerender(); }}>Cancelar</Button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

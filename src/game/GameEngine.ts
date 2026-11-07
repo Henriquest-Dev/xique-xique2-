@@ -138,6 +138,7 @@ export class GameEngine {
   private paused = false;
   private ready = false;
   public isReady() { return this.ready; }
+  public isBuildable(x: number, z: number) { return this.world ? this.world.isBuildable(x, z) : { ok: false, reason: 'O mundo ainda está a carregar.' }; }
 
   private world: BuiltWorld | null = null;
   private traffic: TrafficSystem | null = null;
@@ -145,6 +146,8 @@ export class GameEngine {
   private nightFactor = 0;
   private boxSync = 0;
   private unsubLive: (() => void) | null = null;
+  private unsubLots: (() => void) | null = null;
+  private lotsSig = '';
   private hemi!: THREE.HemisphereLight;
   private sun!: THREE.DirectionalLight;
   private moon!: THREE.DirectionalLight;
@@ -307,6 +310,16 @@ export class GameEngine {
 
       this.applySettings(gameState.getState().settings);
       this.trimShadowCasters();
+      // reconstrói as casas sempre que um lote muda (compra, venda, fachada) — antes só aparecia o lote vazio
+      const lotSig = () => gameState.getState().lots.map((l) => `${l.id}:${l.hasHouse ? 1 : 0}:${l.ownerId ?? ''}:${l.houseStyle}:${l.wallColor}:${l.roofColor}`).join('|');
+      this.lotsSig = lotSig();
+      this.unsubLots = gameState.subscribe(() => {
+        const sig = lotSig();
+        if (sig === this.lotsSig || !this.world) return;
+        this.lotsSig = sig;
+        this.world.refreshHouses(gameState.getState().lots);
+        this.trimShadowCasters();
+      });
       this.ready = true;
       if (import.meta.env.DEV) { (window as unknown as { __xx?: GameEngine }).__xx = this; (window as unknown as { __gs?: typeof gameState }).__gs = gameState; }
       this.cb.onProgress?.(100, 'Pronto!');
@@ -685,6 +698,7 @@ export class GameEngine {
     this.resizeObserver?.disconnect();
     this.world?.dispose();
     this.unsubLive?.();
+    this.unsubLots?.();
     this.traffic = null;
     sound.setAmbient(false);
     if (this.renderer) {

@@ -23,6 +23,8 @@ import { NewspaperModal } from './components/NewspaperModal';
 import { ElectionModal } from './components/ElectionModal';
 import { AvatarModal } from './components/AvatarModal';
 import { PhoneModal } from './components/PhoneModal';
+import { ConcessionariaModal } from './components/ConcessionariaModal';
+import { finance, playerPos, setBuildable } from './finance';
 import { MapModal } from './components/MapModal';
 import { PlaceModal, PlaceAction } from './components/PlaceModal';
 import { SettingsModal } from './components/SettingsModal';
@@ -221,6 +223,8 @@ export default function App() {
       } else if (target.landmarkId === 'int:usina') {
         engineRef.current?.teleport(USINA_ROOM.cx + 12, USINA_ROOM.cz + 15, true);
         gameState.toast('Entraste na Usina Nuclear. Caminha e observa o reator.', 'info');
+      } else if (target.landmarkId === 'int:concessionaria') {
+        setPanel('concessionaria');
       } else if (target.landmarkId === 'int:usina_painel') {
         setPanel('usina');
       } else if (target.landmarkId === 'int:usina_sair') {
@@ -344,6 +348,7 @@ export default function App() {
       onActivate: (target) => routeActivateRef.current(target),
       onPosition: (x, z, h) => {
         positionRef.current = { x, z };
+        playerPos.x = x; playerPos.z = z;
         setHeading(h);
         if (performance.now() - lastVisitCheck.current > 1000) { lastVisitCheck.current = performance.now(); npcLife.markVisit(x, z); }
         const now = performance.now();
@@ -362,6 +367,7 @@ export default function App() {
         setEngineError(message);
       },
     });
+    setBuildable((x, z) => engine.isBuildable(x, z));
     // se ficar preso a carregar, mostra onde parou em vez de ficar parado para sempre
     const watchdog = window.setTimeout(() => {
       if (!engine.isReady()) setEngineError(`O carregamento ficou preso em: "${progressLabelRef.current}"`);
@@ -779,6 +785,7 @@ export default function App() {
 
           <BackpackModal open={panel === 'backpack'} onClose={closePanel} />
           <FurnitureShopModal open={panel === 'moveis'} onClose={closePanel} />
+          <ConcessionariaModal open={panel === 'concessionaria'} onClose={closePanel} onDrive={(vid) => { void engineRef.current?.setVehicle(vid); closePanel(); gameState.toast('A conduzir o teu carro. Tecla V para guardar.', 'success'); }} />
           <VehicleRentalModal
             open={panel === 'vehicles'}
             onClose={closePanel}
@@ -837,7 +844,7 @@ export default function App() {
               setPanel(to);
             }}
           />
-          <PhoneModal open={panel === 'phone'} onClose={closePanel} onOpenApp={(p) => setPanel(p)} />
+          <PhoneModal open={panel === 'phone'} onClose={closePanel} onOpenApp={(p) => { if (p === 'mark') { const r = finance.markStake(playerPos.x, playerPos.z); gameState.toast(r.message, r.ok ? 'success' : 'warning'); closePanel(); } else setPanel(p); }} />
 
           <MapModal open={panel === 'map'} onClose={closePanel} position={position} onTravel={handleTravel} onGoto={(x, z) => { closePanel(); engineRef.current?.teleport(x, z + 2, true); }} />
 
@@ -851,7 +858,7 @@ export default function App() {
             open={panel === 'pause' || panel === 'settings'}
             onClose={closePanel}
             onResume={closePanel}
-            onOpenAdmin={() => setPanel('admin')}
+            onOpenAdmin={() => { if (import.meta.env.DEV) setPanel('admin'); }}
           />
 
           <AdminModal open={panel === 'admin'} onClose={closePanel} onTeleport={handleTravel} />

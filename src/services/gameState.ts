@@ -44,7 +44,7 @@ import {
   LAYOUT_VERSION,
 } from '../game/constants';
 import { sound } from './sound';
-import { recordGain, recordSpend, syncPlayerAccount } from '../data';
+import { recordGain, recordSpend, syncPlayerAccount, categorize, sourceFor } from '../data';
 
 const STORAGE_KEY = 'xiquexique2_save_v3';
 const LEGACY_KEYS = ['xiquexique2_save_v1', 'xiquexique2_save_v2'];
@@ -287,7 +287,9 @@ class GameStateManager {
 
   constructor() {
     this.state = this.load();
-    syncPlayerAccount(this.state.wallet, this.state.avatar?.name ?? 'Carteira');
+    // o livro-razão manda: se o save foi editado para ter mais dinheiro, volta ao saldo do livro-razão
+    const real = syncPlayerAccount(this.state.wallet, this.state.avatar?.name ?? 'Carteira');
+    if (real !== this.state.wallet) this.state.wallet = real;
     window.setInterval(() => this.persistNow(), 20000);
     window.addEventListener('beforeunload', () => this.persistNow());
   }
@@ -413,8 +415,17 @@ class GameStateManager {
   // ---------------------------------------------------------------------------
   // Economia
   // ---------------------------------------------------------------------------
+  /** Tecto de dinheiro criado por hora (ligado pelo motor financeiro; anti-inflação e anti-batota). */
+  public mintGuard: ((amount: number) => number) | null = null;
+
   public addMoney(amount: number, description: string, silent = false) {
     if (amount <= 0) return;
+    if (this.mintGuard && sourceFor(categorize(description, 'gain')) === 'world:mint') {
+      const paid = this.mintGuard(amount);
+      if (paid < amount && !silent) this.toast('Estás exausto: rendimento reduzido por excesso de trabalho seguido.', 'info');
+      amount = paid;
+      if (amount <= 0) return;
+    }
     this.state.wallet += amount;
     this.state.stats.earnings += amount;
     recordGain(amount, description);
@@ -502,6 +513,46 @@ class GameStateManager {
   // ---------------------------------------------------------------------------
   public getLot(lotId: number): LotData | undefined {
     return this.state.lots.find((l) => l.id === lotId);
+  }
+
+  /** O livro-razão é a verdade: a carteira mostrada segue sempre o saldo dele. */
+  public setWalletFromLedger(balance: number) {
+    if (this.state.wallet === balance) return;
+    this.state.wallet = Math.max(0, Math.round(balance));
+    this.scheduleSave();
+    this.notify();
+  }
+
+  /** Terreno comprado na Prefeitura: cria o lote já com a casa construída. */
+  public addBuiltLot(a: { id: number; x: number; z: number; price: number }) {
+    if (this.state.lots.some((l) => l.id === a.id)) return;
+    const facing = 0;
+    this.state.lots.push({
+      id: a.id, sector: 'centro', x: a.x, z: a.z, width: 12, depth: 12,
+      ownerId: 'player', ownerName: this.state.playerName, ownerHandle: this.state.playerHandle,
+      price: a.price, hasHouse: true,
+      wallColor: ['#f4d6a0', '#cfe8ff', '#ffd1dc', '#d8f3c9', '#f7e1ff'][a.id % 5], roofColor: ['#b5523b', '#445c8f', '#5d4037', '#2e7d6b'][a.id % 4],
+      houseStyle: (['colonial', 'moderna', 'sobrado', 'terrea'] as const)[a.id % 4],
+      facingAngle: facing, doorPos: [a.x + 4, 4.0, a.z], accessPathLength: 3.5,
+      interiorItems: [], visitorAccess: 'public', coResidents: [], purchasedAt: Date.now(),
+    });
+    this.state.playerLotId = this.state.playerLotId ?? a.id;
+    this.recordCityEvent('obra', `${this.state.playerName} comprou um terreno novo e construiu casa (Lote #${a.id}).`);
+    sound.playBuild();
+    this.completeQuest('q_house');
+    this.scheduleSave();
+    this.notify();
+  }
+
+  /** Lote devolvido à Prefeitura (venda ou penhora). */
+  public releaseLot(lotId: number) {
+    const lot = this.getLot(lotId);
+    if (!lot) return;
+    lot.ownerId = null; lot.ownerName = null; lot.ownerHandle = null; lot.hasHouse = false;
+    lot.interiorItems = []; lot.purchasedAt = null; lot.visitorAccess = 'public'; lot.coResidents = [];
+    this.state.playerLotId = this.state.lots.find((l) => l.ownerId === 'player')?.id ?? null;
+    this.scheduleSave();
+    this.notify();
   }
 
   public claimLot(lotId: number): boolean {
@@ -888,7 +939,7 @@ class GameStateManager {
     const law = this.state.laws.find((l) => l.id === 'lei_velocidade');
     if (!law?.active) return;
     if (!this.spendMoney(ECONOMY.fineSpeed, 'Multa de velocidade na Avenida Marginal')) {
-      this.state.wallet = 0;
+      this.spendMoney(this.state.wallet, 'Multa de velocidade (todo o saldo)');
     }
     this.state.stats.fines += 1;
     sound.playError();
@@ -1173,7 +1224,7 @@ class GameStateManager {
     if (Math.random() < run.risk) {
       const good = SMUGGLING_GOODS.find((g) => g.id === run.cargoId);
       const fine = (good?.fine ?? 100) + run.quantity * 20;
-      this.state.wallet = Math.max(0, this.state.wallet - fine);
+      this.spendMoney(Math.min(fine, this.state.wallet), 'Multa: contrabando apanhado');
       this.state.stats.fines += 1;
       this.state.ledger.unshift({
         id: `tx_${Date.now()}`,
@@ -1213,7 +1264,7 @@ class GameStateManager {
       return { ok: false, amount: 0, message: 'Sem dinheiro para os caixotes.' };
     }
     if (Math.random() < CARROT_DEAL.risk) {
-      this.state.wallet = Math.max(0, this.state.wallet - CARROT_DEAL.fine);
+      this.spendMoney(Math.min(CARROT_DEAL.fine, this.state.wallet), 'Multa: cenouras sem selo');
       this.state.stats.fines += 1;
       this.recordCityEvent('crime', `Apreensão de cenouras sem selo junto à Fazenda do Sul. Multa de X$ ${CARROT_DEAL.fine}.`);
       sound.playError();
@@ -1234,6 +1285,7 @@ class GameStateManager {
 
   /** Trapaça de dinheiro (usada no painel de administração). */
   public cheatMoney(amount = 10000) {
+    if (!import.meta.env.DEV) return; // nunca em produção
     this.addMoney(amount, 'Trapaça: dinheiro infinito', true);
     this.recordCityEvent('registo', `Rumores de dinheiro a aparecer do nada na conta de ${this.state.playerName}.`);
     this.toast(`Cheat aplicado: +X$ ${amount}.`, 'success');

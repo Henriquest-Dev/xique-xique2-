@@ -18,12 +18,16 @@ function playerId(): string {
 }
 
 export const PLAYER_ACCOUNT = `player:${playerId()}`;
-export const ledger = new Ledger(new LocalLedgerStore());
+const ledgerStore = new LocalLedgerStore();
+export const ledger = new Ledger(ledgerStore);
+/** Save adulterado: o livro-razão foi descartado e a carteira volta ao valor inicial. */
+export const wasTampered = () => ledgerStore.tampered;
 
 /** Garante a conta do jogador e alinha o saldo com a carteira do save. */
-export function syncPlayerAccount(wallet: number, label = 'Carteira') {
-  if (!ledger.account(PLAYER_ACCOUNT)) ledger.ensure(PLAYER_ACCOUNT, 'player', label, Math.max(0, Math.round(wallet)));
-  else if (ledger.balance(PLAYER_ACCOUNT) !== Math.round(wallet)) ledger.reconcile(PLAYER_ACCOUNT, Math.round(wallet), 'Reconciliação com o save');
+export function syncPlayerAccount(wallet: number, label = 'Carteira'): number {
+  if (!ledger.account(PLAYER_ACCOUNT)) ledger.ensure(PLAYER_ACCOUNT, 'player', label, ledgerStore.tampered ? 1200 : Math.max(0, Math.round(wallet)));
+  // o saldo do livro-razão (assinado) é a verdade; a carteira do save segue-o
+  return ledger.balance(PLAYER_ACCOUNT);
 }
 
 export function recordGain(amount: number, description: string, category?: TxCategory) {

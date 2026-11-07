@@ -11,7 +11,8 @@
     "lint": "tsc --noEmit",
     "doctor": "node scripts/doctor.mjs",
     "doctor:build": "node scripts/doctor.mjs --build",
-    "start": "vite --port=3000 --host=0.0.0.0 --open"
+    "start": "vite --port=3000 --host=0.0.0.0 --open",
+    "test:finance": "tsx scripts/test-finance.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
