@@ -101,6 +101,7 @@ export default function App() {
   const [selectedLandmark, setSelectedLandmark] = useState<Landmark | null>(null);
   const [recording, setRecording] = useState(false);
   const [clean, setClean] = useState(false);
+  const [filming, setFilming] = useState(false);
   const [recFile, setRecFile] = useState<{ url: string; name: string; seconds: number } | null>(null);
   const [industry, setIndustry] = useState<IndustryKind | null>(null);
   const [jobTab, setJobTab] = useState<JobTab>('bakery');
@@ -357,6 +358,7 @@ export default function App() {
           setPosition({ x, z });
         }
       },
+      onAerialEnd: (file) => { setFilming(false); setClean(false); setRecording(false); if (file) setRecFile(file); },
       onDrive: (meters, vehicleId) => {
         if (vehicleId !== 'campaign') return;
         const here = realmAt(positionRef.current.x, positionRef.current.z);
@@ -682,14 +684,8 @@ export default function App() {
     return <TitleScreen hasSave={hasSave} savedName={savedName} savedHandle={st.playerHandle} onStart={startGame} />;
   }
 
-  // Formato do palco: o jogo ocupa 9:16, 16:9 ou todo o ecrã, sempre centrado.
-  const aspect = st.settings.aspect ?? 'auto';
-  const stageStyle: React.CSSProperties =
-    aspect === 'portrait'
-      ? { width: 'min(100vw, calc(100dvh * 9 / 16))', height: 'min(100dvh, calc(100vw * 16 / 9))' }
-      : aspect === 'landscape'
-      ? { width: 'min(100vw, calc(100dvh * 16 / 9))', height: 'min(100dvh, calc(100vw * 9 / 16))' }
-      : { width: '100%', height: '100%' };
+  // O jogo ocupa sempre o ecrã inteiro e segue a rotação real do aparelho (vertical ou horizontal).
+  const stageStyle: React.CSSProperties = { width: '100%', height: '100%' };
 
   return (
     <div className="fixed inset-0 flex items-center justify-center overflow-hidden bg-black">
@@ -859,7 +855,24 @@ export default function App() {
             onClose={closePanel}
             onResume={closePanel}
             onOpenAdmin={() => { if (import.meta.env.DEV) setPanel('admin'); }}
+            onFilmCity={(sec) => {
+              const eng = engineRef.current;
+              closePanel();
+              if (!eng) return;
+              if (eng.startAerialTour(sec)) { setFilming(true); setClean(true); }
+              else gameState.toast('Não foi possível filmar agora (o navegador pode não suportar gravação).', 'warning');
+            }}
           />
+
+          {filming && (
+            <div className="pointer-events-none absolute inset-x-0 top-[max(0.75rem,env(safe-area-inset-top))] z-50 flex justify-center px-3">
+              <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border-2 border-red-400/60 bg-black/70 px-4 py-2 text-white">
+                <span className="h-3 w-3 animate-pulse rounded-full bg-red-500" />
+                <span className="text-sm font-bold">A filmar a cidade</span>
+                <button className="rounded-xl bg-red-500 px-3 py-1 text-sm font-extrabold" onClick={() => void engineRef.current?.stopAerialTour()}>Parar</button>
+              </div>
+            </div>
+          )}
 
           <AdminModal open={panel === 'admin'} onClose={closePanel} onTeleport={handleTravel} />
 

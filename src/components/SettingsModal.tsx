@@ -11,9 +11,11 @@ interface Props {
   onClose: () => void;
   onResume: () => void;
   onOpenAdmin: () => void;
+  onFilmCity: (seconds: number) => void;
 }
 
-export function SettingsModal({ open, onClose, onResume, onOpenAdmin }: Props) {
+export function SettingsModal({ open, onClose, onResume, onOpenAdmin, onFilmCity }: Props) {
+  const [filmSecs, setFilmSecs] = useState(60);
   const state = gameState.getState();
   const [hour, setHour] = useState(state.timeOfDay);
   const [checks, setChecks] = useState<Check[] | null>(null);
@@ -42,6 +44,17 @@ export function SettingsModal({ open, onClose, onResume, onOpenAdmin }: Props) {
       }
     >
       <div className="space-y-3">
+        <div className="rounded-2xl border border-2 border-[#3c4686]/70 bg-[#10153a] p-3">
+          <SectionTitle>Filmar a cidade (vista de cima)</SectionTitle>
+          <p className="mb-2 text-[11px] text-slate-400">A câmara sobe e percorre a cidade toda, mostrando as casas com o @ de cada morador. O vídeo é gravado e guardado no teu aparelho.</p>
+          <div className="mb-2 flex gap-2">
+            {[30, 60, 120].map((sec) => (
+              <button key={sec} onClick={() => setFilmSecs(sec)} className={`flex-1 rounded-xl border-2 px-2 py-2 text-sm font-bold ${filmSecs === sec ? 'border-amber-400 bg-amber-400/20 text-amber-200' : 'border-[#3c4686]/70 text-slate-200'}`}>{sec < 60 ? `${sec} s` : `${sec / 60} min`}</button>
+            ))}
+          </div>
+          <Button onClick={() => onFilmCity(filmSecs)} icon={<Play size={16} />}>Começar a filmar</Button>
+        </div>
+
         <div className="rounded-2xl border border-2 border-[#3c4686]/70 bg-[#10153a] p-3">
           <SectionTitle>Definições</SectionTitle>
           <div className="space-y-2">
@@ -85,32 +98,6 @@ export function SettingsModal({ open, onClose, onResume, onOpenAdmin }: Props) {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-2 border-[#3c4686]/70 bg-[#10153a] p-3">
-          <SectionTitle>Formato do ecrã</SectionTitle>
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { key: 'auto' as const, label: 'Automático', hint: 'Ecrã inteiro' },
-              { key: 'portrait' as const, label: '9:16', hint: 'Vertical' },
-              { key: 'landscape' as const, label: '16:9', hint: 'Horizontal' },
-            ].map((option) => (
-              <button
-                key={option.key}
-                onClick={() => gameState.setSettings({ aspect: option.key })}
-                className={`rounded-xl border px-2 py-2 text-center transition ${
-                  state.settings.aspect === option.key
-                    ? 'border-amber-400/60 bg-amber-400/10 text-amber-200'
-                    : 'border-2 border-[#3c4686]/70 bg-[#10153a] text-slate-300 hover:bg-[#1a2150]'
-                }`}
-              >
-                <span className="block text-xs font-bold">{option.label}</span>
-                <span className="block text-[10px] text-slate-400">{option.hint}</span>
-              </button>
-            ))}
-          </div>
-          <p className="mt-1 text-[10px] text-slate-400">
-            Útil no telemóvel: 9:16 para jogar de pé e 16:9 para jogar deitado, com barras negras nas margens.
-          </p>
-        </div>
 
         <div className="rounded-2xl border border-2 border-[#3c4686]/70 bg-[#10153a] p-3">
           <SectionTitle>Hora do dia</SectionTitle>

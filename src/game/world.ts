@@ -59,6 +59,8 @@ export interface BuiltWorld {
   benches: { x: number; y: number; z: number; rot: number }[];
   update: (dt: number, timeOfDay: number, elapsed: number) => void;
   refreshHouses: (lots: LotData[]) => void;
+  /** Placas com o @ dos moradores (uma por casa habitada). */
+  plateLayer: THREE.Group;
   /** pode-se construir aqui? (não é estrada, água, edifício nem terreno inclinado) */
   isBuildable: (x: number, z: number, half?: number) => { ok: boolean; reason?: string };
   setCrops: (plots: FarmPlot[]) => void;
@@ -546,6 +548,24 @@ export async function buildWorld(getLots: () => LotData[]): Promise<BuiltWorld> 
   const doorMarkers = new THREE.Group();
   root.add(doorMarkers);
 
+  // Placas com o @ do dono sobre cada casa (sprites partilham a textura por @)
+  const plateLayer = new THREE.Group();
+  plateLayer.name = 'house_plates';
+  root.add(plateLayer);
+  const plateProto = new Map<string, THREE.Sprite>();
+  const makePlate = (handle: string): THREE.Sprite => {
+    const text = '@' + handle.replace(/^@+/, '');
+    let proto = plateProto.get(text);
+    if (!proto) {
+      proto = createTextSprite(text, { background: '#2b2f77', color: '#ffffff', accent: '#fbbf24', fontSize: 52, scale: 0.034 });
+      plateProto.set(text, proto);
+    }
+    const sp = proto.clone();
+    sp.userData.baseScale = sp.scale.clone();
+    sp.userData.plate = true;
+    return sp;
+  };
+
   const buildHouseLayer = (currentLots: LotData[]) => {
     // Limpa
     while (houseLayer.children.length > 0) {
@@ -561,6 +581,7 @@ export async function buildWorld(getLots: () => LotData[]): Promise<BuiltWorld> 
     while (doorMarkers.children.length > 0) {
       doorMarkers.remove(doorMarkers.children[0]);
     }
+    plateLayer.clear();
     lotPickerObjects.forEach((obj) => {
       root.remove(obj);
       const mesh = obj as THREE.Mesh;
@@ -605,6 +626,12 @@ export async function buildWorld(getLots: () => LotData[]): Promise<BuiltWorld> 
             .scale(new THREE.Vector3(0.92, 0.92, 1));
           windowMatrices.push(m);
         });
+
+        if (lot.ownerHandle) {
+          const plate = makePlate(lot.ownerHandle);
+          plate.position.set(lot.x, 11.2, lot.z);
+          plateLayer.add(plate);
+        }
 
         colliders.push({
           minX: lot.x - footprintW / 2 - 0.2,
@@ -1461,6 +1488,7 @@ export async function buildWorld(getLots: () => LotData[]): Promise<BuiltWorld> 
     benches,
     update,
     refreshHouses: buildHouseLayer,
+    plateLayer,
     isBuildable: (x, z, half = 7) => {
       if (isWaterAt(x, z)) return { ok: false, reason: 'Isto é água ou praia: não se pode construir.' };
       if (getSlopeAt(x, z) > 0.35) return { ok: false, reason: 'Terreno demasiado inclinado.' };

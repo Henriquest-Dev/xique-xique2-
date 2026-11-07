@@ -57,9 +57,14 @@ export function MapModal({ open, onClose, position, onTravel, onGoto }: Props) {
     g.imageSmoothingQuality = 'high';
     g.drawImage(src, 0, 0, 640, 640);
     // grelha leve
-    g.strokeStyle = 'rgba(255,255,255,.08)';
+    g.strokeStyle = 'rgba(255,255,255,.07)';
     g.lineWidth = 1;
     for (let i = 1; i < 8; i++) { g.beginPath(); g.moveTo((i * 640) / 8, 0); g.lineTo((i * 640) / 8, 640); g.moveTo(0, (i * 640) / 8); g.lineTo(640, (i * 640) / 8); g.stroke(); }
+    // vinheta suave para destacar o centro da cidade
+    const vg = g.createRadialGradient(320, 320, 200, 320, 320, 460);
+    vg.addColorStop(0, 'rgba(8,12,40,0)');
+    vg.addColorStop(1, 'rgba(8,12,40,.55)');
+    g.fillStyle = vg; g.fillRect(0, 0, 640, 640);
   }, [open]);
 
   const W = WORLD_BOUNDS.maxX - WORLD_BOUNDS.minX;
@@ -90,10 +95,13 @@ export function MapModal({ open, onClose, position, onTravel, onGoto }: Props) {
       width="max-w-5xl"
       footer={<div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400"><span>Posição: {Math.round(position.x)}, {Math.round(position.z)}</span><span>Táxi: X$ 25 + X$ 6 por 100 m</span></div>}
     >
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div style={{ maxWidth: 'min(640px, calc(100dvh - 250px))' }} className="relative mx-auto aspect-square w-full overflow-hidden rounded-3xl border-4 border-[#3c4686] bg-[#0b3a63] shadow-[0_6px_0_#0d1030]">
+      <div className="grid gap-3 [@media(orientation:landscape)]:grid-cols-[minmax(0,1fr)_minmax(240px,320px)] lg:gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div style={{ maxWidth: 'min(640px, calc(100dvh - 120px))' }} className="relative mx-auto aspect-square w-full overflow-hidden rounded-[28px] border-4 border-[#4a56a8] bg-[#0b3a63] shadow-[0_6px_0_#0d1030,inset_0_0_0_3px_rgba(255,255,255,.12),0_0_32px_rgba(99,102,241,.35)]">
           <canvas ref={cv} className="absolute inset-0 h-full w-full" />
-          <span className="absolute left-3 top-2 font-display text-sm font-extrabold text-white/80">N</span>
+          <span className="pointer-events-none absolute right-3 top-3 z-20 flex h-10 w-10 flex-col items-center justify-center rounded-full border-2 border-white/40 bg-[#171c3d]/80 font-display text-[11px] font-extrabold leading-none text-white shadow-lg">
+            <span className="text-amber-300">N</span>
+            <span className="mt-0.5 h-0 w-0 border-x-[4px] border-b-[8px] border-x-transparent border-b-amber-300" style={{ order: -1 }} />
+          </span>
           {LANDMARKS.map((l) => {
             const on = filter === 'all' || category(l.id, l.zone) === filter;
             const active = sel === l.id;
@@ -102,10 +110,15 @@ export function MapModal({ open, onClose, position, onTravel, onGoto }: Props) {
                 key={l.id}
                 onClick={() => setSel(l.id)}
                 aria-label={l.name}
-                className={`absolute z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white shadow-[0_2px_0_rgba(0,0,0,.45)] transition ${on ? 'opacity-100' : 'opacity-20'} ${active ? 'z-20 h-9 w-9 scale-110 ring-4 ring-amber-300' : 'h-6 w-6 sm:h-7 sm:w-7'}`}
-                style={{ ...pct(l.x, l.z), backgroundColor: l.color }}
+                className={`absolute flex -translate-x-1/2 -translate-y-full items-center justify-center transition ${on ? 'opacity-100' : 'opacity-20'} ${active ? 'z-30 scale-125' : 'z-10 hover:scale-110'}`}
+                style={pct(l.x, l.z)}
               >
-                <GameIcon name={l.icon} size={active ? 18 : 13} className="text-white" />
+                <span
+                  className={`flex items-center justify-center rounded-full rounded-bl-none border-2 border-white shadow-[0_3px_6px_rgba(0,0,0,.5)] ${active ? 'h-9 w-9 ring-4 ring-amber-300/80' : 'h-6 w-6 sm:h-7 sm:w-7 [@media(max-height:480px)]:h-5 [@media(max-height:480px)]:w-5'}`}
+                  style={{ backgroundColor: l.color, transform: 'rotate(-45deg)' }}
+                >
+                  <span style={{ transform: 'rotate(45deg)' }} className="flex"><GameIcon name={l.icon} size={active ? 17 : 12} className="text-white" /></span>
+                </span>
               </button>
             );
           })}
@@ -117,7 +130,7 @@ export function MapModal({ open, onClose, position, onTravel, onGoto }: Props) {
             <span className="relative block h-4 w-4 rounded-full border-[3px] border-white bg-sky-500 shadow-lg" />
           </span>
           {picked && (
-            <p className="absolute inset-x-3 bottom-3 z-30 rounded-xl border-2 border-[#3c4686] bg-[#171c3d]/95 px-3 py-2 text-center text-sm font-extrabold text-white">{picked.name}</p>
+            <p className="absolute inset-x-6 bottom-3 z-30 truncate rounded-full border-2 border-amber-300/70 bg-gradient-to-b from-[#2b2f77] to-[#171c3d] px-4 py-1.5 text-center text-sm font-extrabold text-amber-100 shadow-[0_3px_0_#0d1030]">{picked.name}</p>
           )}
         </div>
 
@@ -154,7 +167,7 @@ export function MapModal({ open, onClose, position, onTravel, onGoto }: Props) {
             <p className="rounded-2xl border-2 border-dashed border-[#3c4686] p-3 text-xs text-slate-400">{tr('map.pick')}</p>
           )}
 
-          <div className="max-h-[260px] space-y-1.5 overflow-y-auto pr-1 lg:max-h-[300px]">
+          <div className="max-h-[200px] space-y-1.5 overflow-y-auto pr-1 [@media(orientation:landscape)]:max-h-[calc(100dvh-330px)] lg:max-h-[300px]">
             {items.map((l) => (
               <button key={l.id} onClick={() => setSel(l.id)} className={`flex w-full items-center gap-2 rounded-xl border-2 px-2 py-1.5 text-left transition ${sel === l.id ? 'border-amber-300 bg-amber-300/10' : 'border-[#3c4686]/60 bg-[#10153a] hover:bg-[#1a2150]'}`}>
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-white/80" style={{ backgroundColor: l.color }}><GameIcon name={l.icon} size={13} className="text-white" /></span>

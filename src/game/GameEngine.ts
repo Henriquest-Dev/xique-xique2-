@@ -58,6 +58,8 @@ export interface EngineCallbacks {
   onHomeSelect?: (furnitureId: string | null) => void;
   onHomePlacing?: (placing: boolean) => void;
   onError?: (message: string) => void;
+  /** fim da filmagem aérea (automático ou manual); traz o ficheiro gravado */
+  onAerialEnd?: (file: { url: string; name: string; seconds: number } | null) => void;
   /** metros percorridos montado num veículo (para campanhas) */
   onDrive?: (meters: number, vehicleId: string) => void;
 }
@@ -211,16 +213,35 @@ export class GameEngine {
   // ---------------------------------------------------------------------------
   // Arranque
   // ---------------------------------------------------------------------------
+  /** Chrome é mais exigente com o WebGL: tenta várias configurações, com pausas, antes de desistir. */
+  private async createRendererRobust(lite: boolean): Promise<THREE.WebGLRenderer> {
+    const attempts: THREE.WebGLRendererParameters[] = [
+      { antialias: !lite, powerPreference: lite ? 'default' : 'high-performance' },
+      { antialias: false, powerPreference: 'default' },
+      { antialias: false, powerPreference: 'low-power', stencil: false, alpha: false, failIfMajorPerformanceCaveat: false },
+      { antialias: false, stencil: false, depth: true, alpha: false, preserveDrawingBuffer: false },
+    ];
+    let lastErr: unknown = null;
+    for (let round = 0; round < 2; round++) {
+      for (const params of attempts) {
+        try {
+          const r = new THREE.WebGLRenderer(params);
+          const gl = r.getContext();
+          if (gl && !gl.isContextLost()) return r;
+          r.dispose();
+        } catch (e) { lastErr = e; }
+      }
+      // dá tempo ao Chrome para libertar contextos de outras abas e tenta outra vez
+      await new Promise((res) => setTimeout(res, 600));
+    }
+    throw lastErr instanceof Error ? lastErr : new Error('Error creating WebGL context.');
+  }
+
   public async init(): Promise<void> {
     try {
       this.cb.onProgress?.(3, 'A criar o renderer…');
       const lite = (() => { try { return localStorage.getItem('xx_lite') === '1'; } catch { return false; } })();
-      try {
-        this.renderer = new THREE.WebGLRenderer({ antialias: !lite, powerPreference: lite ? 'default' : 'high-performance' });
-      } catch {
-        // alguns telemóveis recusam o pedido "high-performance": tenta o mínimo possível
-        this.renderer = new THREE.WebGLRenderer({ antialias: false });
-      }
+      this.renderer = await this.createRendererRobust(lite);
       this.lite = lite;
       this.maxBudget = lite ? 0.6e6 : (window.matchMedia?.('(pointer: coarse)').matches ? 0.85e6 : 1.6e6);
       this.pixelBudget = this.maxBudget;
@@ -311,7 +332,7 @@ export class GameEngine {
       this.applySettings(gameState.getState().settings);
       this.trimShadowCasters();
       // reconstrói as casas sempre que um lote muda (compra, venda, fachada) — antes só aparecia o lote vazio
-      const lotSig = () => gameState.getState().lots.map((l) => `${l.id}:${l.hasHouse ? 1 : 0}:${l.ownerId ?? ''}:${l.houseStyle}:${l.wallColor}:${l.roofColor}`).join('|');
+      const lotSig = () => gameState.getState().lots.map((l) => `${l.id}:${l.hasHouse ? 1 : 0}:${l.ownerId ?? ''}:${l.ownerHandle ?? ''}:${l.houseStyle}:${l.wallColor}:${l.roofColor}`).join('|');
       this.lotsSig = lotSig();
       this.unsubLots = gameState.subscribe(() => {
         const sig = lotSig();
@@ -458,6 +479,93 @@ export class GameEngine {
         this.recorder = null;
       };
       rec.stop();
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Filmagem aérea: câmara de cima percorre a cidade toda e grava em vídeo
+  // ---------------------------------------------------------------------------
+  private aerial: { t: number; dur: number; pts: THREE.Vector3[]; len: number[]; total: number; h: number } | null = null;
+  private plateTimer = 0;
+
+  public isAerial() { return !!this.aerial; }
+  public aerialProgress() { return this.aerial ? this.aerial.t / this.aerial.dur : 0; }
+
+  public startAerialTour(seconds: number): boolean {
+    if (this.aerial || !this.ready) return false;
+    const lots = gameState.getState().lots;
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const l of lots) { minX = Math.min(minX, l.x); maxX = Math.max(maxX, l.x); minZ = Math.min(minZ, l.z); maxZ = Math.max(maxZ, l.z); }
+    if (!isFinite(minX)) return false;
+    const m = 30;
+    minX -= m; maxX += m; minZ -= m; maxZ += m;
+    const h = 150, fov = 50;
+    const aspect = this.camera.aspect || 1.6;
+    const viewH = 2 * h * Math.tan((fov / 2) * Math.PI / 180);   // metros no eixo Z do ecrã
+    const viewW = viewH * aspect;                                  // metros no eixo X do ecrã
+    const axis = (min: number, max: number, view: number) => {
+      const half = view / 2;
+      if (max - min <= view) return [(min + max) / 2];
+      const n = Math.ceil((max - min - view) / (view * 0.8)) + 1;
+      return Array.from({ length: n }, (_, i) => min + half + (i / Math.max(1, n - 1)) * (max - min - view));
+    };
+    const xs = axis(minX, maxX, viewW), zs = axis(minZ, maxZ, viewH);
+    const pts: THREE.Vector3[] = [];
+    zs.forEach((z, row) => {
+      const line = row % 2 === 0 ? xs : [...xs].reverse();
+      line.forEach((x) => pts.push(new THREE.Vector3(x, h, z)));
+    });
+    const len: number[] = [0];
+    for (let i = 1; i < pts.length; i++) len.push(len[i - 1] + pts[i].distanceTo(pts[i - 1]));
+    const total = Math.max(1, len[len.length - 1]);
+    this.aerial = { t: 0, dur: Math.max(15, seconds), pts, len, total, h };
+    this.cameraMode = 'top';
+    this.setPaused(true);               // o jogador fica parado durante a filmagem
+    this.world?.plateLayer.children.forEach((c) => { c.visible = true; const b = c.userData.baseScale as THREE.Vector3 | undefined; if (b) c.scale.copy(b).multiplyScalar(2.6); });
+    if (!this.isRecording()) this.startRecording();
+    return true;
+  }
+
+  public async stopAerialTour(): Promise<void> {
+    if (!this.aerial) return;
+    this.aerial = null;
+    this.camera.up.set(0, 1, 0);
+    this.world?.plateLayer.children.forEach((c) => { const b = c.userData.baseScale as THREE.Vector3 | undefined; if (b) c.scale.copy(b); });
+    const file = this.isRecording() ? await this.stopRecording() : null;
+    this.setPaused(false);
+    this.setCameraMode('third');
+    this.cb.onAerialEnd?.(file);
+  }
+
+  private updateAerial(dt: number) {
+    const a = this.aerial;
+    if (!a) return;
+    a.t += dt;
+    if (a.t >= a.dur) { void this.stopAerialTour(); return; }
+    const u = a.t / a.dur;
+    const e = u * u * (3 - 2 * u) * 0.35 + u * 0.65;          // arranque e fim suaves, velocidade quase constante
+    const d = e * a.total;
+    let i = 1;
+    while (i < a.len.length - 1 && a.len[i] < d) i++;
+    const seg = a.len[i] - a.len[i - 1] || 1;
+    const k = a.pts.length === 1 ? 0 : Math.min(1, Math.max(0, (d - a.len[i - 1]) / seg));
+    const p0 = a.pts[Math.max(0, i - 1)], p1 = a.pts[Math.min(a.pts.length - 1, i)];
+    this.camera.up.set(0, 0, -1);
+    this.camera.position.set(p0.x + (p1.x - p0.x) * k, a.h, p0.z + (p1.z - p0.z) * k);
+    this.camera.near = 1; this.camera.fov = 50;
+    this.camera.lookAt(this.camera.position.x, 0, this.camera.position.z);
+    this.camera.updateProjectionMatrix();
+  }
+
+  /** Mostra as placas só perto do jogador (poupa GPU); na filmagem aérea mostra todas. */
+  private updatePlates(dt: number) {
+    this.plateTimer -= dt;
+    if (this.plateTimer > 0 || !this.world || this.aerial) return;
+    this.plateTimer = 0.4;
+    const r2 = 95 * 95;
+    this.world.plateLayer.children.forEach((c) => {
+      const dx = c.position.x - this.pos.x, dz = c.position.z - this.pos.z;
+      c.visible = dx * dx + dz * dz < r2;
     });
   }
 
@@ -1530,7 +1638,8 @@ export class GameEngine {
     this.updateLighting(dt);
     this.updatePointLights(dt);
     this.adaptQuality();
-    this.updateCamera(dt);
+    this.updatePlates(dt);
+    if (this.aerial) this.updateAerial(dt); else this.updateCamera(dt);
 
     // mudanças de avatar/nome feitas no menu
     if (!this.paused && this.avatarKey() !== this.lastAvatarKey) {

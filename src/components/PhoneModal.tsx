@@ -227,29 +227,6 @@ export function PhoneModal({ open, onClose, onOpenApp }: Props) {
             </button>
           ))}
 
-          <div className="rounded-xl border border-2 border-[#3c4686]/70 bg-[#10153a] px-3 py-2.5">
-            <p className="mb-2 text-xs font-bold text-slate-100">Formato do ecrã</p>
-            <div className="grid grid-cols-3 gap-1.5">
-              {[
-                { key: 'auto' as const, label: 'Auto' },
-                { key: 'portrait' as const, label: '9:16' },
-                { key: 'landscape' as const, label: '16:9' },
-              ].map((option) => (
-                <button
-                  key={option.key}
-                  onClick={() => gameState.setSettings({ aspect: option.key })}
-                  className={`rounded-lg border px-2 py-1.5 text-[11px] font-bold transition ${
-                    state.settings.aspect === option.key
-                      ? 'border-amber-400/60 bg-amber-400/10 text-amber-200'
-                      : 'border-2 border-[#3c4686]/70 bg-[#10153a] text-slate-300'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            <p className="mt-1.5 text-[10px] text-slate-400">9:16 vertical · 16:9 horizontal</p>
-          </div>
 
           <div className="rounded-xl border border-2 border-[#3c4686]/70 bg-[#10153a] px-3 py-2.5">
             <div className="mb-1.5 flex items-center justify-between text-xs">
